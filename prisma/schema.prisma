@@ -18,6 +18,8 @@ model User {
   expenses           Expense[]
   tasks              Task[]
   notes              Note[]
+
+  @@map("fin_users")
 }
 
 model Message {
@@ -27,6 +29,8 @@ model Message {
   role       String   // "user" ou "assistant"
   content    String
   created_at DateTime @default(now())
+
+  @@map("fin_messages")
 }
 
 model Expense {
@@ -36,6 +40,8 @@ model Expense {
   amount      Float
   description String
   date        DateTime @default(now())
+
+  @@map("fin_expenses")
 }
 
 model Task {
@@ -46,6 +52,8 @@ model Task {
   due_date    DateTime?
   completed   Boolean  @default(false)
   created_at  DateTime @default(now())
+
+  @@map("fin_tasks")
 }
 
 model Note {
@@ -54,4 +62,6 @@ model Note {
   user        User     @relation(fields: [user_id], references: [id])
   content     String
   created_at  DateTime @default(now())
+
+  @@map("fin_notes")
 }
