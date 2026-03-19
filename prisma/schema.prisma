@@ -11,9 +11,13 @@ model User {
   id                 String    @id @default(uuid())
   phone_number       String    @unique
   stripe_customer_id String?   @unique
-  status             String    @default("INACTIVE")
+  status             String    @default("ACTIVE") // For MVP test phase
   created_at         DateTime  @default(now())
-  messages          Message[]
+
+  messages           Message[]
+  expenses           Expense[]
+  tasks              Task[]
+  notes              Note[]
 }
 
 model Message {
@@ -23,4 +27,31 @@ model Message {
   role       String   // "user" ou "assistant"
   content    String
   created_at DateTime @default(now())
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  user_id     String
+  user        User     @relation(fields: [user_id], references: [id])
+  amount      Float
+  description String
+  date        DateTime @default(now())
+}
+
+model Task {
+  id          String   @id @default(uuid())
+  user_id     String
+  user        User     @relation(fields: [user_id], references: [id])
+  title       String
+  due_date    DateTime?
+  completed   Boolean  @default(false)
+  created_at  DateTime @default(now())
+}
+
+model Note {
+  id          String   @id @default(uuid())
+  user_id     String
+  user        User     @relation(fields: [user_id], references: [id])
+  content     String
+  created_at  DateTime @default(now())
 }
