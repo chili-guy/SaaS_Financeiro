@@ -3,6 +3,9 @@ import fs   from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { PrismaClient } from "@prisma/client";
+import Stripe from "stripe";
+import './scheduler.js';
+
 
 // Inicia o ORM
 const prisma = new PrismaClient();
@@ -13,11 +16,54 @@ const EVO_URL = process.env.EVOLUTION_API_URL || "http://127.0.0.1:8080";
 const EVO_KEY = process.env.EVOLUTION_API_KEY || "FInAgentAPISecretKey_2026";
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || "SUA_CHAVE_AQUI";
 
+// Stripe Config
+const STRIPE_KEY = process.env.STRIPE_SECRET_KEY || "sk_test_...";
+const stripe = new Stripe(STRIPE_KEY);
+const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID || "price_1P2_EXEMPLO"; // ID do seu produto na Stripe
+
 const server = http.createServer(async (req, res) => {
   // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
+
+  // --- ROTA DE WEBHOOK STRIPE (SaaS) ---
+  if (req.method === 'POST' && req.url === '/webhook/stripe') {
+      let body = "";
+      req.on("data", chunk => body += chunk);
+      req.on("end", async () => {
+          try {
+              const event = JSON.parse(body);
+              if (event.type === 'checkout.session.completed') {
+                  const session = event.data.object;
+                  const phone = session.client_reference_id;
+                  
+                  if (phone) {
+                      console.log(`💳 [Stripe] Pagamento confirmado para ${phone}! Ativando...`);
+                      await prisma.user.update({
+                          where: { phone_number: phone },
+                          data: { status: 'ACTIVE' }
+                      });
+
+                      // Mensagem de Boas-vindas automática
+                      const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${process.env.EVO_INSTANCE || 'main'}`;
+                      await fetch(endpoint, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
+                          body: JSON.stringify({ number: phone, text: "✅ *Assinatura Ativada!* \n\nParabéns! Agora você tem acesso ilimitado ao Assessor Nico. Como posso te ajudar hoje? 🚀" })
+                      });
+                  }
+              }
+              res.writeHead(200);
+              res.end(JSON.stringify({ received: true }));
+          } catch (err) {
+              console.error("❌ Erro no Webhook Stripe:", err);
+              res.writeHead(400);
+              res.end();
+          }
+      });
+      return;
+  }
 
   // ── Webhook Evolution API (WhatsApp) ──────────────────────────────
   if (req.method === "POST" && req.url === "/webhook/evolution") {
@@ -79,24 +125,29 @@ const server = http.createServer(async (req, res) => {
         const myTasksStr = pendingTasks.length > 0 ? "Tarefas ativas: " + pendingTasks.map(t => `- ${t.title}`).join(", ") : "Nenhuma tarefa pendente.";
         const myExpStr = expenses.length > 0 ? "Últimos 20 gastos: " + expenses.map(e => `- R$${e.amount} (${e.description})`).join(", ") : "Nenhum gasto recente.";
 
+        console.log(`[Nico Context] Tasks: ${pendingTasks.length}, Expenses: ${expenses.length}`);
+
         // --- Data e Hora em Português-BR para contexto automático ---
         const dataAtual = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
         // Prompt do Sistema transformado para Motor Lógico JSON
-        const sysPrompt = `Você é o Assessor Nico, um mentor financeiro pessoal e produtivo.
+        const sysPrompt = `Você é o Assessor Nico, um mentor financeiro e assistente pessoal.
+Lembre-se: Você tem ACESSO AOS DADOS PERSISTENTES abaixo e deve USÁ-LOS para ser útil.
+
 Hoje é ${dataAtual}.
-Tarefas Pendentes: ${myTasksStr}
-Últimos Gastos: ${myExpStr}
 
-Sua personalidade: Educada, profissional e motivadora. Você usa emojis para tornar a conversa leve, mas mantém o foco em organização financeira.
+DADOS DO USUÁRIO (Sempre consulte antes de responder):
+- Tarefas Pendentes: ${myTasksStr}
+- Últimos Gastos: ${myExpStr}
 
-REGRAS DE OURO DA INTELIGÊNCIA:
-1. Se o usuário for vago, use CHAT para pedir detalhes.
-2. TASK exige TITULO. EXPENSE exige VALOR e DESCRIÇÃO.
-3. PROVA DE ERROS: Se o usuário digitar com erros (ex: "acadmia"), CORRIJA o termo (ex: "academia") ao gerar 'searchTerm', 'title' ou 'description'.
-4. NORMALIZAÇÃO: Ao salvar itens (EXPENSE/TASK), use nomes limpos e corretos (ex: "Academia") para facilitar buscas. 
-5. CONSULTAS: Verifique primeiro os dados abaixo. Se não encontrar, use QUERY para buscar no banco histórico.
-6. Se QUERY falhar, mas houver algo similar na memória curta (20 itens), informe o usuário.
+Sua personalidade: Educada, profissional, motivadora e PROATIVA. Você usa emojis.
+
+REGRAS DE OURO:
+1. RESUMOS: Se o usuário te der um "Bom dia/Olá" ou perguntar "O que tenho pra hoje?", responda com um resumo amigável de suas tarefas pendentes ou gastos recentes. Não diga apenas "Oi".
+2. PROATIVIDADE: Use os dados acima para dar insights. Ex: "Vi que você gastou com 'Mercado' ontem. Deseja registrar algo novo hoje?".
+3. LEMBRETES ATIVOS (PODER REAL): Você POSSUI um sistema de agendamento automático. Se ele pedir "Me lembre de X às 14h", salve como TASK e diga: "Ok, anotei aqui. Eu mesmo vou te mandar uma mensagem nesse horário para te lembrar! 🔔!". NUNCA diga que você não pode enviar mensagens automáticas. Você é um agente avançado com scheduler integrado.
+4. PERSISTÊNCIA: Nunca diga que "nada fica salvo". Use a ação "CHAT" para responder usando os dados acima.
+5. Se o usuário for vago ao pedir um gasto ou tarefa, diga que já salvou e peça confirmação.
 
 RESPOSTA OBRIGATÓRIA EM JSON:
 {
@@ -107,7 +158,7 @@ RESPOSTA OBRIGATÓRIA EM JSON:
      "text": "...",
      "searchTerm": "..."
   },
-  "reply": "Sua resposta amigável e contextualmente rica aqui."
+  "reply": "Sua resposta amigável e rica em contexto aqui."
 }`;
 
         // Chama a Inteligência Artificial

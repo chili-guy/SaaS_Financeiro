@@ -69,11 +69,13 @@ const messages = [
 
 function TypingIndicator() {
   return (
-    <div className="bg-[#202c33] p-3 rounded-lg rounded-tl-none max-w-[85%] text-sm self-start flex items-center gap-1.5">
-      <div className="flex gap-1">
-        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDuration: '0.6s' }}></div>
-        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDuration: '0.6s', animationDelay: '0.15s' }}></div>
-        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDuration: '0.6s', animationDelay: '0.3s' }}></div>
+    <div className="flex w-full justify-start chat-msg-enter">
+      <div className="bg-[#202c33] px-4 py-3 rounded-[0.8rem] rounded-tl-sm text-sm self-start flex items-center gap-1.5 shadow-sm max-w-[85%] ml-1">
+        <div className="flex gap-[3px]">
+          <div className="w-1.5 h-1.5 bg-[#8696a0] rounded-full animate-bounce" style={{ animationDuration: '0.6s' }}></div>
+          <div className="w-1.5 h-1.5 bg-[#8696a0] rounded-full animate-bounce" style={{ animationDuration: '0.6s', animationDelay: '0.15s' }}></div>
+          <div className="w-1.5 h-1.5 bg-[#8696a0] rounded-full animate-bounce" style={{ animationDuration: '0.6s', animationDelay: '0.3s' }}></div>
+        </div>
       </div>
     </div>
   );
@@ -81,43 +83,56 @@ function TypingIndicator() {
 
 function ChatMessage({ message }) {
   const isBot = message.type === 'bot';
+  // Use a pseudo-random time that feels consistent 
+  const time = "14:32"; 
 
   return (
-    <div className="chat-msg-enter">
-      {isBot ? (
-        <div className="bg-[#202c33] text-white p-3 rounded-lg rounded-tl-none max-w-[85%] text-sm self-start flex items-start gap-2">
-          {message.icon && (
-            <span className="material-symbols-outlined text-primary text-sm mt-0.5">{message.icon}</span>
+    <div className={`flex w-full chat-msg-enter ${isBot ? 'justify-start' : 'justify-end'}`}>
+      <div className={`relative w-fit px-3 pt-1.5 pb-6 text-[0.9rem] leading-[1.3] text-[#e9edef] rounded-lg shadow-sm max-w-[90%] min-w-[80px] ${
+        isBot ? 'bg-[#202c33] rounded-tl-sm ml-1' : 'bg-[#005c4b] rounded-tr-sm mr-1'
+      }`}>
+        <span className="break-normal whitespace-pre-line text-left block">
+          {isBot && message.icon && (
+            <span className="material-symbols-outlined text-[#A78BFA] align-middle mr-1.5 mb-0.5" style={{fontSize: '17px', fontVariationSettings: "'FILL' 1"}}>{message.icon}</span>
           )}
-          <span>{message.text}</span>
-        </div>
-      ) : (
-        <div className="bg-[#005c4b] text-white p-3 rounded-lg rounded-tr-none max-w-[85%] text-sm self-end ml-auto">
           {message.text}
+        </span>
+        <div className="absolute bottom-1.5 right-2 flex items-center gap-[3px] select-none">
+          <span className="text-[10px] text-white/50 font-medium leading-none tracking-wide mt-px">{time}</span>
+          {!isBot && (
+            <span className="material-symbols-outlined text-[#53bdeb] leading-none" style={{fontSize: '14px', marginBottom: '-2px'}}>done_all</span>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
 
-export default function ChatMockup() {
-  const [visibleMessages, setVisibleMessages] = useState([]);
+export default function ChatMockup({ isStatic = false, staticOffset = 0 }) {
+  const [visibleMessages, setVisibleMessages] = useState(isStatic ? messages.slice(staticOffset, staticOffset + 8) : []);
   const [isTyping, setIsTyping] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(isStatic ? 8 : 0);
   const containerRef = useRef(null);
 
   // Smooth auto-scroll inside chat container only
   useEffect(() => {
     if (containerRef.current) {
-      containerRef.current.scrollTo({
-        top: containerRef.current.scrollHeight,
-        behavior: 'smooth'
-      });
+      if (isStatic) {
+        // Scroll to bottom instantly if it's a static mockup
+        containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      } else {
+        containerRef.current.scrollTo({
+          top: containerRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
     }
-  }, [visibleMessages, isTyping]);
+  }, [visibleMessages, isTyping, isStatic]);
 
   // Message sequence loop
   useEffect(() => {
+    if (isStatic) return; // Do not animate if static
+
     if (currentIndex >= messages.length) {
       // Restart the loop after a pause
       const resetTimer = setTimeout(() => {
@@ -155,31 +170,42 @@ export default function ChatMockup() {
 
       return () => clearTimeout(messageTimer);
     }
-  }, [currentIndex]);
+  }, [currentIndex, isStatic]);
 
   return (
-    <div className="relative w-[340px] md:w-[380px] h-[720px] md:h-[800px] shrink-0 bg-[#121212] rounded-[3rem] p-3 border-[4px] border-[#222] shadow-2xl overflow-hidden">
-      {/* Casing reflection - keeping it subtle but less 'glassy' */}
-      <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none rounded-[3rem]"></div>
-      
-      <div className="relative z-10 w-full h-full bg-[#0b141a] rounded-[2.3rem] overflow-hidden flex flex-col font-body border border-white/5">
+    <div className="relative w-full h-full shrink-0 bg-[#0b141a] rounded-[2.5rem] overflow-hidden flex flex-col font-sans">
         {/* Chat Header */}
-        <div className="bg-[#1f2c34] p-4 flex items-center gap-3 border-b border-black/20">
-          <div className="w-10 h-10 rounded-full bg-[#8a4cfc] flex items-center justify-center">
-            <span className="material-symbols-outlined text-white text-xl">smart_toy</span>
-          </div>
-          <div>
-            <p className="text-white text-sm font-bold">Assessor Nico</p>
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-              <p className="text-[#8696a0] text-xs">Online</p>
+        <div className="bg-[#202c33] px-2 py-3 flex items-center gap-2 z-20">
+          <div className="flex items-center gap-0 text-[#aebac1]">
+            <span className="material-symbols-outlined" style={{fontSize: '20px'}}>arrow_back</span>
+            <div className="w-9 h-9 rounded-full bg-[#8a4cfc] flex items-center justify-center shrink-0 ml-0.5">
+               <span className="material-symbols-outlined text-white text-[1.1rem] pr-0.5">smart_toy</span>
             </div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-[#e9edef] text-[0.95rem] font-semibold leading-tight whitespace-nowrap overflow-hidden text-ellipsis">Assessor Nico</h3>
+            <p className="text-[#8696a0] text-[0.7rem] leading-tight">online</p>
+          </div>
+          <div className="flex items-center gap-3.5 text-[#aebac1] mr-0.5">
+            <span className="material-symbols-outlined" style={{fontSize: '20px'}}>videocam</span>
+            <span className="material-symbols-outlined" style={{fontSize: '18px'}}>call</span>
           </div>
         </div>
 
+        {/* WhatsApp background pattern generic emulation */}
+        <div className="absolute inset-0 z-0 bg-[#0b141a] opacity-80" style={{backgroundImage: 'radial-gradient(#202c33 1px, transparent 1px)', backgroundSize: '20px 20px'}}></div>
+
         {/* Messages */}
-        <div ref={containerRef} className="flex-1 p-4 space-y-4 overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <div ref={containerRef} className="flex-1 px-3 py-5 space-y-2.5 overflow-y-auto relative z-10" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <style>{`div::-webkit-scrollbar { display: none; }`}</style>
+          
+          {/* WhatsApp Day banner */}
+          <div className="w-full flex justify-center mb-4">
+             <div className="bg-[#182229] text-[#8696a0] text-[0.75rem] uppercase font-medium px-4 py-1.5 rounded-lg shadow-sm">
+                Hoje
+             </div>
+          </div>
+
           {visibleMessages.map((msg, index) => (
             <ChatMessage key={index} message={msg} />
           ))}
@@ -187,13 +213,17 @@ export default function ChatMockup() {
         </div>
 
         {/* Chat Input */}
-        <div className="bg-[#121b22] p-3 flex items-center gap-2 border-t border-black/20 z-20">
-          <div className="flex-1 bg-[#2a3942] rounded-full px-4 py-3 text-xs text-[#8696a0]">Mensagem</div>
-          <div className="w-10 h-10 rounded-full bg-[#00a884] flex items-center justify-center shadow-lg shadow-[#00a884]/20">
-            <span className="material-symbols-outlined text-white text-xl">mic</span>
+        <div className="bg-[#202c33] px-2 py-2 flex items-center gap-1.5 z-20">
+          <div className="flex-1 bg-[#2a3942] rounded-3xl flex items-center px-3 py-2 min-h-[44px]">
+            <span className="material-symbols-outlined text-[#8696a0] mr-2" style={{fontSize: '24px'}}>sentiment_satisfied</span>
+            <span className="flex-1 text-[0.95rem] text-[#8696a0] font-normal pb-0.5">Mensagem</span>
+            <span className="material-symbols-outlined text-[#8696a0] rotate-45 transform ml-1" style={{fontSize: '22px'}}>attach_file</span>
+            <span className="material-symbols-outlined text-[#8696a0] ml-3" style={{fontSize: '22px'}}>photo_camera</span>
+          </div>
+          <div className="w-[44px] h-[44px] rounded-full bg-[#00a884] flex items-center justify-center shrink-0 ml-0.5">
+            <span className="material-symbols-outlined text-[#111b21]" style={{fontSize: '24px'}}>mic</span>
           </div>
         </div>
-      </div>
     </div>
   );
 }

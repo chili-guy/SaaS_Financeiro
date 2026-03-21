@@ -51,6 +51,7 @@ model Task {
   title       String
   due_date    DateTime?
   completed   Boolean  @default(false)
+  notified    Boolean  @default(false)
   created_at  DateTime @default(now())
 
   @@map("fin_tasks")

@@ -1,533 +1,653 @@
-import React, { useRef, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ChatMockup from './ChatMockup';
 import './index.css';
 
-/* Avaliações Row 1 */
-const reviewsTrack1 = [
-  { t: "Nunca mais esqueci um boleto. O Nico é como ter um assistente pessoal que custa centavos.", a: "Mariana Costa", r: "Designer Freelancer" },
-  { t: "O registro de gastos por voz mudou meu jogo. Agora sei exatamente pra onde meu dinheiro vai todo mês.", a: "Ricardo Silva", r: "Empreendedor" },
-  { t: "Muito melhor do que preencher planilha! Mando um áudio rápido e meu fluxo de caixa está montado.", a: "João Pedro", r: "Dono de Agência" },
-  { t: "Sou péssima em guardar notas fiscais físicas. Agora mando foto e ele computa o gasto perfeitamente.", a: "Camila Rocha", r: "Médica" },
-  { t: "O fato de funcionar no WhatsApp que eu já abro 100x por dia faz toda a diferença do mundo na adesão.", a: "Fernando Albuquerque", r: "Especialista em TI" }
-];
-
-/* Avaliações Row 2 */
-const reviewsTrack2 = [
-  { t: "Ter um assessor 24h que me avisa do vencimento da fatura vale muito mais que o dobro do preço.", a: "Thiago Fernandes", r: "Desenvolvedor" },
-  { t: "Antes eu terminava o mês no zero sem saber por quê. O Nico categorizou tudo sozinho pra mim.", a: "Letícia Santos", r: "Arquiteta" },
-  { t: "Fiz uma viagem de 15 dias, ia relatando em áudio os passeios. Nico cuidou do balanço total.", a: "Marina Pelaes", r: "Nômade Digital" },
-  { t: "Adeus GuiaBolso e planilhas complexas, a forma de uso mais natural possível é conversar no zap.", a: "André Matos", r: "Consultor" },
-  { t: "Organizou minha vida de uma forma absurda. Sem fricção de baixar ou criar conta em app novo.", a: "Rafael Gomes", r: "Motorista Autônomo" }
-];
-
-/* Componente de Card de Review */
-const ReviewCard = ({ review }) => (
-  <div className="w-[320px] md:w-[400px] flex-shrink-0 p-7 rounded-[2rem] bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04] transition-colors duration-300 flex flex-col justify-between">
-    <div>
-      <div className="flex gap-1 text-[#8a4cfc] mb-4">
-        {[...Array(5)].map((_, i) => (
-          <span key={i} className="material-symbols-outlined text-[15px]" style={{ fontVariationSettings: '"FILL" 1' }}>star</span>
-        ))}
-      </div>
-      <p className="text-white/80 text-[1.05rem] leading-relaxed mb-6 font-light">"{review.t}"</p>
+const Logo = ({ className = "h-10", dark = false }) => (
+  <div className={`flex items-center gap-2.5 ${className} transition-transform duration-300 hover:scale-[1.05]`} aria-label="Assessor Nico Logo">
+    <div className="h-full aspect-square relative flex items-center justify-center">
+      <svg viewBox="0 0 100 100" className="h-full w-full drop-shadow-sm overflow-visible">
+        <defs>
+          <linearGradient id="nicoLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style={{stopColor: '#8B5CF6', stopOpacity: 1}} />
+            <stop offset="100%" style={{stopColor: '#7C3AED', stopOpacity: 1}} />
+          </linearGradient>
+        </defs>
+        <path 
+          d="M50,15 C30.67,15 15,30.67 15,50 C15,58.85 18.25,66.95 23.6,73.15 L16.5,88.5 L33.25,82.75 C38.35,84.2 43.8,85 50,85 C69.33,85 85,69.33 85,50 C85,30.67 69.33,15 50,15 Z" 
+          fill="url(#nicoLogoGrad)"
+        />
+        <path 
+          d="M38 48L47 57L65 39" 
+          stroke="white" 
+          strokeWidth="8" 
+          strokeLinecap="round" 
+          strokeLinejoin="round" 
+          fill="none"
+        />
+      </svg>
     </div>
-    <div className="flex items-center gap-3">
-      <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-[#7C3AED]/20 to-[#bd9dff]/10 border border-white/5 flex items-center justify-center text-white/70 text-[0.9rem] font-bold uppercase shrink-0">
-        {review.a.charAt(0)}
-      </div>
-      <div>
-        <h4 className="text-white/90 text-sm font-bold tracking-tight">{review.a}</h4>
-        <p className="text-white/40 text-xs font-medium">{review.r}</p>
-      </div>
+    <div className="flex items-center gap-1.5 leading-none py-1">
+       <span className="font-black text-[#7C3AED] text-[1.25rem] md:text-[1.5rem] tracking-tighter">Nico</span>
+       <span className={`font-medium ${dark ? 'text-white' : 'text-[#64748B]'} text-[1.25rem] md:text-[1.5rem] tracking-tight`}>Assessor</span>
     </div>
   </div>
 );
 
+const reviews1 = [
+  { name: "João Paulo", role: "Empreendedor", text: "Cara, a melhor coisa que fiz foi usar o Nico. Minha fatura do cartão despencou sem eu nem perceber." },
+  { name: "Mariana T.", role: "Autônoma", text: "Não preciso mais lembrar de anotar gastos. Só mando uma mensagem rápida e tá resolvido." },
+  { name: "Roberto D.", role: "Médico", text: "A gestão de agenda é sensacional. O Nico me avisa dos horários muito melhor que qualquer app." },
+  { name: "Luiza S.", role: "Designer", text: "Achei que ia ser difícil mexer, mas como é tudo direto no teclado do WhatsApp, foi super natural." },
+  { name: "Thiago M.", role: "Empresário", text: "Muito bom. Fluxo de caixa de empresa pequena é bagunça, e o Nico organiza tudo perfeitamente." },
+  { name: "Camila V.", role: "Arquiteta", text: "Organização nota 1000! Não vivo mais sem o Nico pra lembrar de pagar os fornecedores da obra." }
+];
+
+const reviews2 = [
+  { name: "Pedro H.", role: "Consultor", text: "Ter meus recebíveis e contas a pagar do mês listados num relatório todo dia cedo mudou a saúde da minha empresa." },
+  { name: "Carolina M.", role: "Dentista", text: "Excelente para profissionais da saúde. Registro os retornos e o Nico me avisa de cada um." },
+  { name: "Rafael C.", role: "Freelancer", text: "Controlar pagamentos fracionados de clientes era meu terror. O assessor virtual transformou esse pesadelo numa notificação simples." },
+  { name: "Bruno L.", role: "Gestor Clínico", text: "Simplicidade pura, meus funcionários só lançam no WhatsApp e está tudo registrado. Adeus planilha de drive." },
+  { name: "Isabela R.", role: "Social Media", text: "Sou 100% dinâmica e a praticidade do WhatsApp foi a combinação que eu precisava pra minha rotina corrida." },
+  { name: "Gabriel S.", role: "Lojista", text: "Lançar cada entrada agora é rápido. O fechamento de caixa que levava 2 horas, hoje eu bato tudo em 5 minutos com o Nico." }
+];
+
+const faqs = [
+  {
+    q: "Como o Nico funciona na prática?",
+    a: "É muito simples. Você adiciona o número do Nico no seu WhatsApp como se fosse um contato normal. Sempre que tiver um gasto, receber um pagamento ou precisar marcar um compromisso, basta mandar uma mensagem de texto ou áudio (ex: 'Gastei 150 reais no supermercado'). O Nico entende, categoriza e lança no seu painel automaticamente."
+  },
+  {
+    q: "Meus dados financeiros estão seguros?",
+    a: "Sim, utilizamos criptografia de ponta-a-ponta nativa do WhatsApp e bancos de dados isolados. O que significa que os detalhes financeiros trocados na plataforma não são visíveis a humanos. Seu painel web tem camadas extras de autenticação."
+  },
+  {
+    q: "Preciso baixar algum aplicativo?",
+    a: "Não! A grande vantagem do Nico é que 90% da sua interação diária acontece pelo aplicativo que você já usa: o WhatsApp. Seus relatórios, configurações e gráficos detalhados podem ser acessados via navegador de internet em um painel web que não requer instalação de nada novo."
+  },
+  {
+    q: "O Nico entende áudios longos ou gírias?",
+    a: "A nossa IA (assessor financeiro) é treinada especificamente para o português fluído e informal falado no Brasil. Incluindo sotaques, abreviações de bancos e gírias. Você pode mandar um áudio de 2 minutos narrando vários gastos de uma obra, e ele organizará um por um perfeitamente."
+  },
+  {
+    q: "E se eu errar uma informação na mensagem, como corrijo?",
+    a: "É tão orgânico quanto conversar com um humano. Basta você enviar logo em seguida: 'Nico, desculpe, o gasto anterior não foi no débito, foi no crédito em 3x'. Ele compreende o contexto temporal e atualiza a entrada anterior antes que feche qualquer relatório do dia."
+  }
+];
+
+function FAQItem({ question, answer }) {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className="border-b border-[#e2e8f0] py-6 last:border-b-0">
+      <button 
+        onClick={() => setIsOpen(!isOpen)} 
+        className="w-full flex justify-between items-center text-left transition-colors group"
+      >
+        <span className="font-headline font-bold text-[#111827] text-[1.05rem] md:text-[1.15rem] group-hover:text-[#7C3AED] transition-colors">{question}</span>
+        <span className={`material-symbols-outlined text-[#7C3AED] transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
+          expand_more
+        </span>
+      </button>
+      <div className={`overflow-hidden transition-all duration-300 ${isOpen ? 'max-h-96 mt-4 opacity-100' : 'max-h-0 opacity-0'}`}>
+        <p className="font-body text-[#64748B] text-[1rem] leading-[1.7] pr-8">{answer}</p>
+      </div>
+    </div>
+  );
+}
+
 function App() {
-  const heroRef = useRef(null);
-  // const [tilt, setTilt] = useState({ x: 0, y: 0 }); // Removed useState for tilt
+  const [scrollY, setScrollY] = useState(0);
 
-  const lastMoveRef = useRef(0);
-  const handleMouseMove = (e) => {
-    const now = Date.now();
-    if (now - lastMoveRef.current < 16) return; // Limit to 60fps
-    lastMoveRef.current = now;
-
-    if (!heroRef.current) return;
-    const rect = heroRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
-    // Map mouse position to narrow tilt for stability
-    const xPercent = x / rect.width;
-    const yPercent = y / rect.height;
-    const tiltX = (yPercent - 0.5) * -8; // Reduced range
-    const tiltY = (xPercent - 0.5) * 8; 
-    
-    // Direct DOM update for high performance
-    heroRef.current.style.setProperty('--tilt-x', `${tiltX}deg`);
-    heroRef.current.style.setProperty('--tilt-y', `${tiltY}deg`);
-  };
-  
-  const handleMouseLeave = () => {
-    if (heroRef.current) {
-      heroRef.current.style.setProperty('--tilt-x', `0deg`);
-      heroRef.current.style.setProperty('--tilt-y', `0deg`);
-    }
-  };
+  useEffect(() => {
+    const handleScroll = () => setScrollY(window.scrollY);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   return (
-    <div className="bg-background text-on-background font-body selection:bg-primary selection:text-on-primary">
-      {/* Top Navigation */}
-      <nav className="fixed top-0 w-full z-50 bg-[#050505]/60 backdrop-blur-xl border-b border-white/[0.04]">
-        <div className="max-w-7xl mx-auto flex justify-between items-center px-4 md:px-12 py-4">
-          <div className="flex items-center gap-1.5 font-headline text-xl">
-            <span className="font-bold text-[#7C3AED] tracking-tight">Nico</span>
-            <span className="font-normal text-[#64748B] tracking-wide">Assessor</span>
+    <div className="bg-white text-[#111827] font-body selection:bg-[#7C3AED]/20 selection:text-[#7C3AED] overflow-x-hidden">
+      
+      {/* Navigation */}
+      <nav className="relative w-full z-50 bg-white">
+        <div className="max-w-7xl mx-auto flex justify-between items-center px-6 py-6 border-b border-transparent">
+          {/* Brand Logo - Nico Assessor */}
+          <a href="/" className="flex items-center">
+            <Logo className="h-10 md:h-12" />
+          </a>
+          
+          {/* Links */}
+          <div className="hidden md:flex items-center space-x-10 font-body text-[0.95rem] font-medium text-[#64748B]">
+            <a className="hover:text-[#7C3AED] transition-colors" href="#como-funciona">Como funciona</a>
+            <a className="hover:text-[#7C3AED] transition-colors" href="#avaliacoes">Avaliações</a>
+            <a className="hover:text-[#7C3AED] transition-colors" href="#planos">Planos</a>
           </div>
-          <div className="hidden md:flex items-center space-x-8 font-headline text-sm tracking-tight">
-            <a className="text-neutral-400 hover:text-white transition-colors duration-300" href="#about">O que é</a>
-            <a className="text-neutral-400 hover:text-white transition-colors duration-300" href="#benefits">Vantagens</a>
-            <a className="text-neutral-400 hover:text-white transition-colors duration-300" href="#how-it-works">Como funciona</a>
-          </div>
-          <a className="bg-gradient-to-r from-primary to-primary-dim text-on-primary-fixed px-6 py-2.5 rounded-full text-sm font-semibold hover:scale-95 duration-200 ease-out transition-transform" href="https://wa.me/assessornico">
-            Começar no WhatsApp
+          
+          {/* Login Button */}
+          <a className="bg-[#7C3AED] text-white px-7 py-2.5 rounded-full text-[0.9rem] font-body font-semibold hover:bg-[#4C1D95] transition-all duration-300 flex items-center gap-2" href="#">
+            <span className="material-symbols-outlined text-[18px]">login</span>
+            Login
           </a>
         </div>
       </nav>
 
       {/* Hero Section */}
-      <main 
-        ref={heroRef}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-        className="relative pt-24 pb-0 overflow-hidden min-h-screen flex items-center will-change-transform" 
-        style={{ perspective: '1200px', '--tilt-x': '0deg', '--tilt-y': '0deg' }}
-      >
-        {/* === Gif Hero Background === */}
-        <div className="absolute inset-0 w-full h-full z-0 bg-[#050505] overflow-hidden scale-110">
-          <img 
-            src="/hero-bg.gif" 
-            className="w-full h-full object-cover object-top opacity-70" 
-            alt="Hero background"
-          />
-          {/* atmospheric blend overlay */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/40 to-[#050505] z-[1] pointer-events-none"></div>
-        </div>
-        
-        {/* Content */}
-        <div className="max-w-7xl mx-auto px-6 w-full relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-2 items-center gap-12 lg:gap-20">
-            
-            {/* Left: Copy with refined hierarchy and soft glass backing */}
-            <div 
-              style={{ transform: `rotateX(var(--tilt-x)) rotateY(var(--tilt-y))` }}
-              className="space-y-7 max-w-2xl relative p-10 md:p-14 rounded-[3.5rem] bg-white/[0.01] backdrop-blur-2xl border border-white/[0.08] shadow-[0_20px_80px_rgba(0,0,0,0.4)] group overflow-hidden transition-transform duration-200 ease-out will-change-transform transform-gpu"
-            >
-              <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-[#7C3AED]/5 blur-3xl rounded-full pointer-events-none transition-all duration-700 group-hover:bg-[#7C3AED]/10"></div>
+      <section className="relative pt-16 pb-0 flex flex-col items-center justify-center text-center px-4 overflow-hidden bg-white" id="como-funciona">
+        <div className="max-w-[900px] relative z-10 mx-auto flex flex-col items-center">
+          
+          {/* Top subtle text */}
+          <p className="text-[#7C3AED] text-[13px] md:text-[0.9rem] font-body font-semibold tracking-wide mb-5">
+            Você ainda tá tentando lembrar tudo de cabeça ou não sabe pra onde está indo seu dinheiro?
+          </p>
+          
+          {/* Main Headline */}
+          <h1 className="text-4xl md:text-[3.4rem] font-headline font-bold leading-[1.05] tracking-tight text-[#111827] mb-12">
+            Tenha um assessor pessoal<br/>trabalhando 24 horas por dia pra você
+          </h1>
 
-              
-              <div className="relative z-10 w-full flex flex-col items-start gap-7">
-                {/* Badge */}
-                <div className="inline-flex items-center gap-2.5 bg-white/[0.04] rounded-full px-5 py-2">
-                  <div className="relative">
-                    <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                    <div className="absolute inset-0 w-2 h-2 bg-green-400 rounded-full animate-ping opacity-75"></div>
-                  </div>
-                  <span className="text-white/70 text-xs font-headline font-medium tracking-wide">Disponível 24h no WhatsApp</span>
-                </div>
-
-                  <h1 className="text-[2.8rem] md:text-[4.5rem] lg:text-[4.6rem] xl:text-[5rem] font-headline font-bold leading-[1.05] tracking-[-0.03em] text-white">
-                    Sua vida<br />organizada<br />pelo
-                    <span className="relative inline-block md:ml-3">
-                      <span className="bg-gradient-to-r from-[#A78BFA] via-[#8B5CF6] to-[#7C3AED] bg-clip-text text-transparent"> WhatsApp.</span>
-                    </span>
-                  </h1>
-
-                <p className="text-[1.05rem] md:text-lg text-white/80 max-w-md leading-[1.7] font-light">
-                  Registre gastos, crie lembretes e organize sua rotina conversando naturalmente. Sem apps novos. Sem fricção.
-                </p>
-
-                <div className="flex flex-col sm:flex-row gap-3.5 pt-2 w-full sm:w-auto">
-                  <a href="https://wa.me/assessornico" className="group relative inline-flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-full text-[0.95rem] font-bold transition-all duration-300 overflow-hidden shadow-xl hover:shadow-[#7C3AED]/30 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]">
-                    <div className="absolute inset-0 bg-gradient-to-r from-[#7C3AED] to-[#4C1D95] transition-opacity duration-300"></div>
-                    
-                    {/* Design Spell: Dynamic Shimmer Glow inside button */}
-                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-full overflow-hidden">
-                       <div className="absolute -inset-x-full top-0 h-full bg-gradient-to-r from-transparent via-white/40 to-transparent skew-x-12 translate-x-[-100%] group-hover:animate-[shimmer_1.5s_ease-out_infinite]"></div>
-                       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-4/5 h-1/2 bg-[radial-gradient(circle,rgba(255,255,255,0.4)_0%,transparent_100%)] opacity-0 group-hover:opacity-100 group-hover:translate-y-1 transition-all duration-500 ease-out"></div>
-                    </div>
-
-                    <span className="relative z-10 text-white group-hover:drop-shadow-md">Começar no WhatsApp</span>
-                    <span className="relative z-10 material-symbols-outlined text-white/90 text-lg group-hover:translate-x-1.5 group-hover:scale-110 transition-transform duration-300">arrow_forward</span>
-                  </a>
-                  <a href="#how-it-works" className="relative inline-flex items-center justify-center px-7 py-3.5 rounded-full text-[0.95rem] font-medium text-white/60 border border-white/10 hover:bg-white/5 hover:text-white transition-all duration-300">
-                    Como funciona
-                  </a>
-                </div>
-
-                {/* Social proof line */}
-                <div className="flex items-center gap-3 pt-3">
-                  <div className="flex items-center">
-                    <span className="material-symbols-outlined text-[#7C3AED] text-base" style={{ fontVariationSettings: '"FILL" 1' }}>star</span>
-                    <span className="material-symbols-outlined text-[#7C3AED] text-base" style={{ fontVariationSettings: '"FILL" 1' }}>star</span>
-                    <span className="material-symbols-outlined text-[#7C3AED] text-base" style={{ fontVariationSettings: '"FILL" 1' }}>star</span>
-                    <span className="material-symbols-outlined text-[#7C3AED] text-base" style={{ fontVariationSettings: '"FILL" 1' }}>star</span>
-                    <span className="material-symbols-outlined text-[#7C3AED] text-base" style={{ fontVariationSettings: '"FILL" 1' }}>star</span>
-                  </div>
-                  <span className="text-white/40 text-xs font-medium">Amado por +1.400 usuários</span>
-                </div>
+          {/* 3 Feature Badges */}
+          <div className="flex flex-col md:flex-row gap-4 mb-12 justify-center w-full">
+            {/* Feature 1 */}
+            <div className="flex items-center gap-4 bg-[#F1F5F9] border border-[#e2e8f0] p-4 rounded-2xl text-left w-full md:w-[260px] shadow-sm">
+              <span className="material-symbols-outlined text-[#eab308] text-2xl">lock</span>
+              <div>
+                <p className="font-headline font-bold text-[0.85rem] text-[#111827] leading-tight mb-0.5">criptografia de<br/>ponta-a-ponta</p>
+                <p className="text-[0.7rem] text-[#64748B] font-body font-medium">Seus dados protegidos.</p>
               </div>
             </div>
+            {/* Feature 2 */}
+            <div className="flex items-center gap-4 bg-[#F1F5F9] border border-[#e2e8f0] p-4 rounded-2xl text-left w-full md:w-[260px] shadow-sm">
+              <span className="material-symbols-outlined text-[#7C3AED] text-2xl">chat_bubble</span>
+              <div>
+                <p className="font-headline font-bold text-[0.85rem] text-[#111827] leading-tight mb-0.5">99.9% de precisão</p>
+                <p className="text-[0.7rem] text-[#64748B] font-body font-medium">IA que entende português.</p>
+              </div>
+            </div>
+            {/* Feature 3 */}
+            <div className="flex items-center gap-4 bg-[#F1F5F9] border border-[#e2e8f0] p-4 rounded-2xl text-left w-full md:w-[260px] shadow-sm">
+              <span className="material-symbols-outlined text-[#111827] text-2xl">edit_document</span>
+              <div>
+                <p className="font-headline font-bold text-[0.85rem] text-[#111827] leading-tight mb-0.5">cria ou edita<br/>mensagens</p>
+                <p className="text-[0.7rem] text-[#64748B] font-body font-medium">Direto no WhatsApp.</p>
+              </div>
+            </div>
+          </div>
 
-            {/* Right: Mockup with GPU acceleration */}
-            <div 
-              style={{ transform: `rotateX(var(--tilt-x)) rotateY(var(--tilt-y))` }}
-              className="hidden lg:flex justify-center items-center lg:justify-end transition-transform duration-200 ease-out will-change-transform transform-gpu"
-            >
+          {/* Green CTA Button  */}
+          <a href="https://wa.me/assessornico" className="bg-[#22c55e] text-white font-headline font-bold text-[0.9rem] px-12 py-4 rounded-full hover:bg-[#16a34a] hover:-translate-y-0.5 transition-all duration-300 shadow-md mb-14 uppercase flex items-center justify-center gap-2 tracking-wide">
+            QUERO SER UM ASSESSOR
+            <span className="material-symbols-outlined font-black text-xl">arrow_right_alt</span>
+          </a>
+        </div>
 
-
-              {/* Phone wrapper with gradient border and Design Spell: Interactive 3D Tilt */}
-              <div 
-                className="relative p-[2px] rounded-[3rem] bg-gradient-to-b from-white/20 via-white/5 to-transparent transition-transform duration-500 ease-out will-change-transform transform-gpu"
-                style={{ transform: `rotateX(var(--tilt-x)) rotateY(var(--tilt-y))` }}
-              >
+        {/* 3 Mobile Phones Mockup */}
+        <div className="relative w-full max-w-5xl mx-auto h-auto z-10 flex justify-center gap-3 md:gap-6 px-2 md:px-4 items-center mb-24">
+          {/* Left Phone */}
+          <div className="w-[48%] md:w-[300px] z-10">
+             <div className="rounded-[2.5rem] bg-[#111b21] shadow-[0_20px_50px_rgba(0,0,0,0.5)] border-[6px] md:border-[8px] border-[#222] overflow-hidden aspect-[9/19]">
+                <ChatMockup isStatic={true} staticOffset={0} />
+             </div>
+          </div>
+          {/* Center Phone */}
+          <div className="w-[48%] md:w-[300px] z-10">
+              <div className="rounded-[2.5rem] bg-[#111b21] shadow-[0_20px_50px_rgba(0,0,0,0.5)] border-[6px] md:border-[8px] border-[#222] overflow-hidden aspect-[9/19]">
                 <ChatMockup />
               </div>
-
-              {/* Reflection line at bottom */}
-              <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 w-[60%] h-[1px] bg-gradient-to-r from-transparent via-[#7C3AED]/30 to-transparent"></div>
-            </div>
           </div>
-        </div>
-
-        {/* Bottom fade into next section */}
-        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background to-transparent pointer-events-none z-[2]"></div>
-      </main>
-
-      {/* Infinite Scroll Marquee - Design Polish */}
-      <div className="relative py-8 overflow-hidden border-y border-white/[0.04] bg-[#050505]/60 backdrop-blur-md">
-        <div className="marquee-track">
-          {[...Array(2)].map((_, i) => (
-            <div key={i} className="marquee-content items-center">
-              {[
-                { icon: 'payments', text: 'Controle de Gastos' },
-                { icon: 'event_available', text: 'Agenda Inteligente' },
-                { icon: 'psychology', text: 'Memória Infinita' },
-                { icon: 'notifications_active', text: 'Lembretes Automáticos' },
-                { icon: 'bar_chart', text: 'Relatórios Semanais' },
-                { icon: 'lock', text: 'Criptografia E2E' },
-                { icon: 'chat', text: 'Via WhatsApp' },
-                { icon: 'speed', text: 'Resposta Instantânea' },
-              ].map((item, j) => (
-                <div key={j} className="flex items-center gap-3 px-10 whitespace-nowrap group">
-                  <span className="material-symbols-outlined text-[#7C3AED] text-xl opacity-60 group-hover:opacity-100 transition-opacity">{item.icon}</span>
-                  <span className="text-white/30 text-xs font-headline font-bold uppercase tracking-[0.2em] group-hover:text-white/60 transition-colors">{item.text}</span>
-                  <div className="w-1.5 h-1.5 rounded-full bg-white/10 mx-6 group-hover:bg-[#7C3AED]/40 transition-colors"></div>
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Features Grid - Performance Optimized */}
-      <section className="py-24 relative overflow-hidden" id="benefits" style={{ contentVisibility: 'auto', containIntrinsicSize: '0 800px' }}>
-        {/* Glow background for benefits */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[#7C3AED]/10 blur-[120px] rounded-full pointer-events-none z-[-1]"></div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[#7C3AED]/10 blur-[120px] rounded-full pointer-events-none"></div>
-
-        <div className="max-w-7xl mx-auto px-6 relative z-10">
-          <div className="mb-20 text-center">
-            <span className="text-[#7C3AED] font-headline font-bold tracking-[0.2em] text-xs uppercase">Ecossistema Assessor Nico</span>
-            <h2 className="text-4xl md:text-5xl lg:text-5.5xl font-headline font-bold text-white mt-4 tracking-tight">Tudo o que você precisa,<br/><span className="bg-gradient-to-r from-[#A78BFA] to-[#7C3AED] bg-clip-text text-transparent">em um só lugar.</span></h2>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {/* Gastos */}
-            <div className="glass-card rounded-2xl p-8 hover:bg-white/5 transition-all duration-300 group">
-              <div className="bg-primary/10 w-12 h-12 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <span className="material-symbols-outlined text-primary text-2xl">payments</span>
-              </div>
-              <h3 className="text-xl font-headline font-bold text-white mb-3">Gastos</h3>
-              <p className="text-on-surface-variant text-sm leading-relaxed">Registre despesas instantaneamente por texto ou voz. O Nico categoriza tudo automaticamente.</p>
-            </div>
-            {/* Compromissos */}
-            <div className="glass-card rounded-2xl p-8 hover:bg-white/5 transition-all duration-300 group">
-              <div className="bg-primary/10 w-12 h-12 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <span className="material-symbols-outlined text-primary text-2xl">event_available</span>
-              </div>
-              <h3 className="text-xl font-headline font-bold text-white mb-3">Compromissos</h3>
-              <p className="text-on-surface-variant text-sm leading-relaxed">Gerencie sua agenda sem sair do chat. O Nico organiza reuniões e compromissos com facilidade.</p>
-            </div>
-            {/* Memória */}
-            <div className="glass-card rounded-2xl p-8 hover:bg-white/5 transition-all duration-300 group">
-              <div className="bg-primary/10 w-12 h-12 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <span className="material-symbols-outlined text-primary text-2xl">psychology</span>
-              </div>
-              <h3 className="text-xl font-headline font-bold text-white mb-3">Memória</h3>
-              <p className="text-on-surface-variant text-sm leading-relaxed">Consulte informações passadas a qualquer momento. O Nico lembra de cada detalhe compartilhado.</p>
-            </div>
-            {/* Orçamento Inteligente */}
-            <div className="glass-card rounded-2xl p-8 hover:bg-white/5 transition-all duration-300 group">
-              <div className="bg-primary/10 w-12 h-12 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <span className="material-symbols-outlined text-primary text-2xl">track_changes</span>
-              </div>
-              <h3 className="text-xl font-headline font-bold text-white mb-3">Orçamento Inteligente</h3>
-              <p className="text-on-surface-variant text-sm leading-relaxed">Defina metas para seus gastos e receba alertas em tempo real se estiver chegando perto do seu limite.</p>
-            </div>
-            {/* Lembretes */}
-            <div className="glass-card rounded-2xl p-8 hover:bg-white/5 transition-all duration-300 group">
-              <div className="bg-primary/10 w-12 h-12 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <span className="material-symbols-outlined text-primary text-2xl">notifications_active</span>
-              </div>
-              <h3 className="text-xl font-headline font-bold text-white mb-3">Lembretes</h3>
-              <p className="text-on-surface-variant text-sm leading-relaxed">Nunca mais esqueça um boleto ou tarefa importante. Avisos pontuais no horário solicitado.</p>
-            </div>
-            {/* Integração WhatsApp */}
-            <div className="glass-card rounded-2xl p-8 hover:bg-white/5 transition-all duration-300 group">
-              <div className="bg-primary/10 w-12 h-12 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <span className="material-symbols-outlined text-primary text-2xl">chat</span>
-              </div>
-              <h3 className="text-xl font-headline font-bold text-white mb-3">Integração WhatsApp</h3>
-              <p className="text-on-surface-variant text-sm leading-relaxed">Simplicidade total. Sem aplicativos novos para baixar, use a interface que você já domina.</p>
-            </div>
+          {/* Right Phone */}
+          <div className="w-[48%] md:w-[300px] z-10 hidden md:block">
+             <div className="rounded-[2.5rem] bg-[#111b21] shadow-[0_20px_50px_rgba(0,0,0,0.5)] border-[6px] md:border-[8px] border-[#222] overflow-hidden aspect-[9/19]">
+                <ChatMockup isStatic={true} staticOffset={44} />
+             </div>
           </div>
         </div>
       </section>
 
-      {/* How it works - Optimized */}
-      <section className="py-24 relative overflow-hidden" id="how-it-works" style={{ contentVisibility: 'auto', containIntrinsicSize: '0 800px' }}>
-        {/* Parallax-like glow */}
-        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[#7C3AED]/3 blur-[100px] rounded-full pointer-events-none translate-x-1/3"></div>
-        
-        <div className="max-w-7xl mx-auto px-6 relative z-10">
-          <div className="max-w-2xl mx-auto p-12 rounded-[2.5rem] glass-premium text-center mb-24 relative overflow-hidden border border-white/10">
-             <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-[#7C3AED]/5 blur-3xl rounded-full"></div>
-             <h2 className="text-4xl md:text-5xl font-headline font-bold text-white relative z-10 tracking-tight">Três passos para a <br/><span className="bg-gradient-to-r from-[#A78BFA] to-[#7C3AED] bg-clip-text text-transparent">liberdade.</span></h2>
-             <p className="text-white/40 mt-6 text-lg relative z-10 font-light">Simplicidade extrema é o nosso lema. Do WhatsApp direto para o seu controle total.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 relative">
-            {/* Step 1 */}
-            <div className="relative z-10 flex flex-col items-center text-center group">
-              <div className="w-24 h-24 rounded-3xl glass-card flex items-center justify-center mb-8 group-hover:scale-110 group-hover:bg-[#7C3AED]/10 group-hover:border-[#7C3AED]/30 transition-all duration-500 border border-white/5 shadow-2xl">
-                <span className="text-3xl font-headline font-bold text-[#A78BFA]">01</span>
-              </div>
-              <h3 className="text-2xl font-headline font-bold text-white mb-3">Envie uma mensagem</h3>
-              <p className="text-white/40 leading-relaxed font-light">Como se estivesse falando com um amigo no WhatsApp. Sem comandos difíceis.</p>
-            </div>
-            {/* Step 2 */}
-            <div className="relative z-10 flex flex-col items-center text-center group">
-              <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#8a4cfc] to-[#6d28d9] flex items-center justify-center mb-8 group-hover:scale-110 shadow-[0_15px_40px_rgba(138,76,252,0.3)] transition-all duration-500">
-                <span className="text-3xl font-headline font-bold text-white">02</span>
-              </div>
-              <h3 className="text-2xl font-headline font-bold text-white mb-3">O Nico processa</h3>
-              <p className="text-white/40 leading-relaxed font-light">Nossa tecnologia interpreta o contexto, salva no banco e responde em segundos.</p>
-            </div>
-            {/* Step 3 */}
-            <div className="relative z-10 flex flex-col items-center text-center group">
-              <div className="w-24 h-24 rounded-3xl glass-card flex items-center justify-center mb-8 group-hover:scale-110 group-hover:bg-[#8a4cfc]/10 group-hover:border-[#8a4cfc]/30 transition-all duration-500 border border-white/5 shadow-2xl">
-                <span className="text-3xl font-headline font-bold text-[#bd9dff]">03</span>
-              </div>
-              <h3 className="text-2xl font-headline font-bold text-white mb-3">Vida sob controle</h3>
-              <p className="text-white/40 leading-relaxed font-light">Pronto. Informação registrada, lembrete agendado. Você livre para o que importa.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonial Section - Optimized */}
-      <section className="py-24 relative overflow-hidden bg-[#050505] border-y border-white/5" style={{ contentVisibility: 'auto', containIntrinsicSize: '0 1000px' }}>
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[600px] bg-[radial-gradient(ellipse_at_top,rgba(138,76,252,0.06),transparent_60%)] pointer-events-none"></div>
-        
-        <div className="max-w-7xl mx-auto px-6 mb-16 relative z-10 text-center">
-          <h2 className="text-4xl md:text-5xl font-headline font-bold text-white leading-tight mb-4 tracking-tight">Quem usa o Nico, <span className="bg-gradient-to-r from-[#bd9dff] via-[#a87cff] to-[#8a4cfc] bg-clip-text text-transparent">não volta atrás.</span></h2>
-          <p className="text-white/50 text-lg max-w-2xl mx-auto font-light">Milhares de rotinas financeiras destravadas pelo WhatsApp, num piscar de olhos de quem odeia planilhas.</p>
-        </div>
-
-        {/* Marquee Tracks Container */}
-        <div className="flex flex-col gap-6 relative z-10">
-           {/* Fade overlay on edges to blend with background */}
-           <div className="absolute inset-y-0 left-0 w-16 md:w-64 bg-gradient-to-r from-background to-transparent z-20 pointer-events-none"></div>
-           <div className="absolute inset-y-0 right-0 w-16 md:w-64 bg-gradient-to-l from-background to-transparent z-20 pointer-events-none"></div>
-
-           {/* Track 1: Move Left */}
-           <div className="flex overflow-hidden group">
-              <div className="marquee-content gap-6 px-3" style={{ animation: 'marqueeScroll 45s linear infinite' }}>
-                {reviewsTrack1.map((r, i) => <ReviewCard key={i} review={r} />)}
-                {reviewsTrack1.map((r, i) => <ReviewCard key={`dup-${i}`} review={r} />)}
-              </div>
+      {/* Full Width Theme Banner */}
+      <section className="w-full bg-[#7C3AED] text-white py-14 px-6 relative z-20">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-12">
+           <div className="md:w-1/2 flex items-center justify-center md:justify-center">
+             <div className="relative text-center">
+               <h2 className="text-4xl md:text-[3rem] font-headline font-extrabold leading-[1.05]">
+                 Sua vida<br/>organizada.<br/>
+                 <span className="relative inline-block border-[3px] border-white rounded-full px-6 py-1 mt-2 rotate-[-3deg]">
+                    Sem esforço.
+                 </span>
+               </h2>
+             </div>
            </div>
-
-           {/* Track 2: Move Right (using reverse direction) */}
-           <div className="flex overflow-hidden group">
-              <div className="marquee-content gap-6 px-3" style={{ animation: 'marqueeScroll 55s linear infinite reverse' }}>
-                {reviewsTrack2.map((r, i) => <ReviewCard key={i} review={r} />)}
-                {reviewsTrack2.map((r, i) => <ReviewCard key={`dup-${i}`} review={r} />)}
-              </div>
+           <div className="md:w-1/2 font-body text-[1.1rem] leading-[1.6]">
+             <p className="mb-4 font-medium">
+               Já se perdeu no meio de tarefas e despesas?<br/>Esqueceu compromissos ou levou um susto com a fatura do cartão?
+             </p>
+             <p className="font-bold">
+               O <strong className="text-[#a78bfa]">Assessor Nico</strong> resolve isso: organização financeira e gestão de compromissos, tudo de forma simples e direta pelo WhatsApp.
+             </p>
            </div>
         </div>
       </section>
 
-      {/* Pricing / Plan Section - Restructured & High Conversion */}
-      <section className="min-h-screen py-32 relative bg-[#050505] overflow-hidden" id="plano">
-        {/* === Mirror GIF Background for Pricing === */}
-        <div className="absolute inset-0 w-full h-full z-0 bg-[#050505] overflow-hidden">
-          <img 
-            src="/hero-bg.gif" 
-            className="w-full h-full object-cover object-bottom opacity-40" 
-            alt="Pricing background"
-          />
-          {/* subtle masking to blend from top to bottom */}
-          <div className="absolute inset-0 bg-gradient-to-b from-[#050505] via-transparent to-[#050505]/40 pointer-events-none"></div>
-        </div>
-        
-        <div className="max-w-7xl mx-auto px-6 relative z-10 flex flex-col items-center">
-          {/* New Focused Header */}
-          <div className="text-center mb-20 max-w-2xl">
-            <h2 className="text-4xl md:text-6xl font-headline font-bold text-white mb-6 tracking-tight">
-              Um pequeno investimento, <br/>
-              <span className="bg-gradient-to-r from-[#A78BFA] via-[#8B5CF6] to-[#7C3AED] bg-clip-text text-transparent">retorno infinito.</span>
-            </h2>
-            <p className="text-white/40 text-lg md:text-xl font-light">
-              Escolha o plano que melhor se adapta à sua jornada financeira.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full max-w-5xl">
-            {/* Plan 1: Beta/Limited (Comparison anchor) */}
-            <div className="p-8 md:p-12 rounded-[3.5rem] bg-white/[0.02] border border-white/5 flex flex-col justify-between group hover:bg-white/[0.04] transition-all duration-500">
-              <div>
-                <div className="flex items-center justify-between mb-8">
-                  <h3 className="text-2xl font-headline font-bold text-white/60">Versão Beta</h3>
-                  <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-white/40 text-[10px] font-bold uppercase tracking-widest">Limitado</span>
-                </div>
-                <div className="mb-10">
-                  <span className="text-4xl font-headline font-bold text-white/40 text-strikethrough">Grátis</span>
-                </div>
-                <ul className="space-y-4 text-white/40 mb-10">
-                  <li className="flex items-center gap-3 text-sm">
-                    <span className="material-symbols-outlined text-sm opacity-50">check</span>
-                    Até 5 registros por dia
-                  </li>
-                  <li className="flex items-center gap-3 text-sm">
-                    <span className="material-symbols-outlined text-sm opacity-50">check</span>
-                    Lembretes simples
-                  </li>
-                  <li className="flex items-center gap-3 text-sm line-through decoration-[#7C3AED]/30">
-                    Sem leitura de áudio/foto
-                  </li>
-                  <li className="flex items-center gap-3 text-sm line-through decoration-[#7C3AED]/30">
-                    Sem relatórios semanais
-                  </li>
-                </ul>
-              </div>
-              <button className="w-full py-4 rounded-2xl border border-white/10 text-white/40 font-bold text-sm cursor-not-allowed">
-                Vagas Esgotadas
-              </button>
-            </div>
-
-            {/* Plan 2: Assessor Premium (The Hero) */}
-            <div className="relative p-[1.5px] rounded-[3.5rem] bg-gradient-to-b from-[#7C3AED] via-white/10 to-transparent shadow-[0_20px_80px_rgba(124,58,237,0.15)] transform lg:scale-105">
-              <div className="h-full bg-[#050505] backdrop-blur-3xl rounded-[3.4rem] p-8 md:p-12 relative overflow-hidden flex flex-col justify-between">
-                {/* Internal Glow */}
-                <div className="absolute -top-1/2 -right-1/2 w-full h-full bg-[#8a4cfc]/5 blur-3xl rounded-full"></div>
-                
-                <div>
-                  <div className="flex items-center justify-between mb-8 relative z-10">
-                    <h3 className="text-3xl font-headline font-bold text-white">Assessor Premium</h3>
-                    <span className="px-3 py-1 rounded-full bg-[#7C3AED]/20 border border-[#7C3AED]/40 text-[#A78BFA] text-[10px] font-bold uppercase tracking-widest">Mais Popular</span>
-                  </div>
-                  <div className="mb-10 relative z-10 flex items-baseline gap-2">
-                    <span className="text-6xl font-headline font-bold text-white tracking-tighter">R$ 9,90</span>
-                    <span className="text-white/40 text-lg">/mês</span>
-                  </div>
-                  <ul className="space-y-5 text-white/80 mb-12 relative z-10">
-                    {[
-                      { text: "Registros Ilimitados", highlight: true },
-                      { text: "Leitura de áudios e imagens", highlight: true },
-                      { text: "Avisos automáticos de boletos", highlight: false },
-                      { text: "Relatórios mensais de fluxo", highlight: false },
-                      { text: "Suporte VIP 24/7", highlight: false }
-                    ].map((item, i) => (
-                      <li key={i} className="flex items-center gap-3 font-light">
-                        <span className="material-symbols-outlined text-[#A78BFA] text-xl" style={{ fontVariationSettings: '"FILL" 1' }}>check_circle</span>
-                        {item.text}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                
-                <a href="https://wa.me/assessornico" className="relative z-10 w-full flex items-center justify-center py-5 rounded-2xl font-bold text-white bg-gradient-to-r from-[#7C3AED] to-[#4C1D95] shadow-[0_10px_30px_rgba(124,58,237,0.3)] hover:shadow-[0_15px_40px_rgba(124,58,237,0.4)] hover:-translate-y-1 transition-all duration-300">
-                  Começar agora
-                </a>
-              </div>
-            </div>
-          </div>
-
-          {/* Trust Badges */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 mt-24 w-full max-w-4xl border-t border-white/5 pt-12 opacity-50">
-             <div className="flex flex-col items-center gap-2 text-center text-white/60">
-                <span className="material-symbols-outlined text-2xl">verified_user</span>
-                <span className="text-[10px] font-bold uppercase tracking-widest">Segurança Bancária</span>
-             </div>
-             <div className="flex flex-col items-center gap-2 text-center text-white/60">
-                <span className="material-symbols-outlined text-2xl">event_repeat</span>
-                <span className="text-[10px] font-bold uppercase tracking-widest">Cancele quando quiser</span>
-             </div>
-             <div className="flex flex-col items-center gap-2 text-center text-white/60">
-                <span className="material-symbols-outlined text-2xl">support_agent</span>
-                <span className="text-[10px] font-bold uppercase tracking-widest">Suporte 24h</span>
-             </div>
-             <div className="flex flex-col items-center gap-2 text-center text-white/60">
-                <span className="material-symbols-outlined text-2xl">history</span>
-                <span className="text-[10px] font-bold uppercase tracking-widest">Garantia 7 dias</span>
-             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer - Glass Harmony */}
-      <footer className="relative py-20 px-6 border-t border-white/5 bg-[#050505]/80 backdrop-blur-3xl overflow-hidden">
-        {/* Subtle glow coming from the top into the footer */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[1px] bg-gradient-to-r from-transparent via-[#8a4cfc]/40 to-transparent"></div>
-        
-        <div className="max-w-7xl mx-auto relative z-10">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-12">
-            <div className="flex flex-col items-start">
-              <span className="text-2xl font-bold text-white mb-3 block font-headline tracking-tighter">Assessor Nico</span>
-              <p className="font-body text-sm text-white/30 max-w-sm">Elevando sua gestão financeira através da Inteligência Artificial humana e direta no seu WhatsApp.</p>
+      {/* Block 1: FINANCEIRO */}
+      <section className="py-24 px-6 bg-white border-b border-[#F1F5F9]">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          <div className="order-2 lg:order-1 flex flex-col items-start text-left">
+            <div className="relative mb-6 block">
+              <h2 className="text-5xl md:text-[4rem] font-headline font-bold text-[#111827] tracking-tight uppercase">FINANCEIRO</h2>
+              <div className="absolute -bottom-2 left-0 w-24 h-1.5 bg-[#7C3AED] rounded-full"></div>
             </div>
             
-            <div className="flex flex-wrap gap-12 text-sm">
-              <div className="flex flex-col gap-4">
-                <span className="text-white font-bold mb-2">Produto</span>
-                <a className="text-white/40 hover:text-[#bd9dff] transition-colors" href="#benefits">Vantagens</a>
-                <a className="text-white/40 hover:text-[#bd9dff] transition-colors" href="#how-it-works">Como funciona</a>
-                <a className="text-white/40 hover:text-[#bd9dff] transition-colors" href="#plano">Plano Premium</a>
-              </div>
-              <div className="flex flex-col gap-4">
-                <span className="text-white font-bold mb-2">Legal</span>
-                <a className="text-white/40 hover:text-[#bd9dff] transition-colors" href="#">Privacidade</a>
-                <a className="text-white/40 hover:text-[#bd9dff] transition-colors" href="#">Termos de Uso</a>
+            <p className="text-[#64748B] font-body text-lg leading-[1.7] mb-6 mt-4">
+              <strong className="text-[#111827]">Assessor Nico Financeiro</strong> organiza sua vida financeira sem planilhas. Basta enviar: <em className="text-[#7C3AED]">"Gastei 50 no almoço"</em> ou <em className="text-[#7C3AED]">"Paguei 200 de luz hoje"</em>.
+            </p>
+            <p className="text-[#64748B] font-body text-lg leading-[1.7] mb-8">
+              A inteligência artificial classifica automaticamente a categoria (Alimentação, Moradia, etc.) e extrai valores e datas para o seu controle total.
+            </p>
+            <p className="text-[#111827] font-body italic font-bold text-lg mb-10 text-pretty">
+              Tudo registrado em segundos, estruturado em banco de dados e pronto para consulta.
+            </p>
+
+            <a href="https://wa.me/assessornico" className="bg-[#7C3AED] text-white font-headline font-bold px-10 py-3.5 rounded-full hover:bg-[#4C1D95] transition-colors duration-300 uppercase tracking-wide text-sm shadow-md">
+              CONTRATAR AGORA →
+            </a>
+          </div>
+          <div className="order-1 lg:order-2">
+            <img src="/dashboard-mockup.png" alt="Dashboard" className="w-full rounded-[1.5rem] shadow-[0_20px_50px_rgba(124,58,237,0.1)] border border-[#F1F5F9]"/>
+          </div>
+        </div>
+      </section>
+
+      {/* Block 2: COMPROMISSOS */}
+      <section className="py-24 px-6 bg-[#F1F5F9] border-b border-[#e2e8f0]">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          <div className="order-1 flex justify-center">
+            <img src="/phone-mockup.png" alt="Compromissos Mockup" className="w-[85%] rounded-[1.5rem] shadow-[0_20px_50px_rgba(124,58,237,0.1)] border border-white"/>
+          </div>
+          <div className="order-2 flex flex-col items-start lg:pl-12">
+            <div className="relative mb-6 block">
+              <h2 className="text-5xl md:text-[3.5rem] font-headline font-bold text-[#111827] tracking-tight uppercase">COMPROMISSOS</h2>
+              <div className="absolute -bottom-2 left-0 w-24 h-1.5 bg-[#7C3AED] rounded-full"></div>
+            </div>
+            
+            <p className="text-[#64748B] font-body text-lg leading-[1.7] mb-6 mt-4">
+              <strong className="text-[#111827]">Assessor Nico Compromissos</strong> é seu secretário 24h. Registre tarefas e lembretes com linguagem natural: <em className="text-[#7C3AED]">"Tenho consulta médica dia 25 às 10h"</em>.
+            </p>
+            <p className="text-[#64748B] font-body text-lg leading-[1.7] mb-8">
+              O sistema identifica o horário e te envia uma mensagem de lembrete no WhatsApp exatamente quando você precisar.
+            </p>
+            <p className="text-[#111827] font-body italic font-bold text-lg mb-10 text-pretty">
+              Nunca mais esqueça uma reunião, tarefa pendente ou data importante.
+            </p>
+
+            <a href="https://wa.me/assessornico" className="bg-[#7C3AED] text-white font-headline font-bold px-10 py-3.5 rounded-full hover:bg-[#4C1D95] transition-colors duration-300 uppercase tracking-wide text-sm shadow-md">
+              CONTRATAR AGORA →
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* Block 3: Registre tudo no WhatsApp */}
+      <section className="py-24 px-6 bg-white border-b border-[#F1F5F9]">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          <div className="order-2 lg:order-1 flex flex-col items-start text-left">
+            <h2 className="text-4xl md:text-[3rem] font-headline font-bold text-[#111827] tracking-tight mb-8">
+              Registre tudo no<br/>WhatsApp
+            </h2>
+            <p className="text-[#64748B] font-body text-lg leading-[1.7] mb-8">
+              Envie uma mensagem e nosso assistente lança tudo automaticamente.
+            </p>
+            <ul className="space-y-5 mb-10">
+               <li className="flex items-center gap-3 text-[#111827] font-body font-medium text-lg">
+                  <span className="w-2 h-2 rounded-full bg-[#7C3AED]"></span>
+                  Classificação automática de intenção
+               </li>
+               <li className="flex items-center gap-3 text-[#111827] font-body font-medium text-lg">
+                  <span className="w-2 h-2 rounded-full bg-[#7C3AED]"></span>
+                  Extração de valores, datas e descrições
+               </li>
+               <li className="flex items-center gap-3 text-[#111827] font-body font-medium text-lg">
+                  <span className="w-2 h-2 rounded-full bg-[#7C3AED]"></span>
+                  Armazenamento seguro em PostgreSQL
+               </li>
+               <li className="flex items-center gap-3 text-[#111827] font-body font-medium text-lg">
+                  <span className="w-2 h-2 rounded-full bg-[#7C3AED]"></span>
+                  Respostas em tempo real no seu chat
+               </li>
+            </ul>
+          </div>
+          <div className="order-1 lg:order-2 flex justify-center lg:justify-end">
+             <div className="w-full max-w-[340px] rounded-[2.5rem] bg-[#111] shadow-[0_20px_50px_rgba(124,58,237,0.15)] border-[6px] border-[#2a2a2a] overflow-hidden aspect-[9/19]">
+                <ChatMockup isStatic={true} staticOffset={0} />
+             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Block 4: Inteligência e Tecnologia */}
+      <section className="py-24 px-6 bg-[#F1F5F9] border-b border-white">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          <div className="order-1">
+             <div className="bg-white p-8 rounded-[2rem] shadow-xl border border-[#e2e8f0]">
+                <div className="space-y-6">
+                   <div className="flex gap-4 p-4 rounded-xl bg-[#F8FAFC] border border-[#F1F5F9]">
+                      <span className="material-symbols-outlined text-[#7C3AED] mt-1">psychology</span>
+                      <div>
+                        <h4 className="font-headline font-bold text-[#111827]">Processamento Natural</h4>
+                        <p className="text-[#64748B] text-sm leading-relaxed">Nossa IA classifica se é uma tarefa, gasto ou anotação sem você precisar clicar em nada.</p>
+                      </div>
+                   </div>
+                   <div className="flex gap-4 p-4 rounded-xl bg-[#F8FAFC] border border-[#F1F5F9]">
+                      <span className="material-symbols-outlined text-[#7C3AED] mt-1">database</span>
+                      <div>
+                        <h4 className="font-headline font-bold text-[#111827]">PostgreSQL</h4>
+                        <p className="text-[#64748B] text-sm leading-relaxed">Dados estruturados e seguros com histórico completo das suas interações.</p>
+                      </div>
+                   </div>
+                   <div className="flex gap-4 p-4 rounded-xl bg-[#F8FAFC] border border-[#F1F5F9]">
+                      <span className="material-symbols-outlined text-[#7C3AED] mt-1">cloud_done</span>
+                      <div>
+                        <h4 className="font-headline font-bold text-[#111827]">Disponibilidade 24/7</h4>
+                        <p className="text-[#64748B] text-sm leading-relaxed">Hospedagem em nuvem garantindo que seu assessor nunca pare de trabalhar.</p>
+                      </div>
+                   </div>
+                </div>
+             </div>
+          </div>
+          <div className="order-2 flex flex-col items-start lg:pl-12">
+            <h2 className="text-4xl md:text-[3rem] font-headline font-bold text-[#111827] tracking-tight mb-8">
+              Inteligência que<br/>te entende
+            </h2>
+            <p className="text-[#64748B] font-body text-[1.1rem] leading-[1.7] mb-8">
+              O Nico não é apenas um bot. Ele usa modelos de IA para interpretar o que você escreve e estruturar a informação da maneira correta.
+            </p>
+            <p className="text-[#111827] font-body italic font-bold text-lg mb-10 text-pretty">
+              Tecnologia de ponta a serviço da sua produtividade diária.
+            </p>
+          </div>
+        </div>
+      </section>
+
+
+      {/* Planos Section */}
+      <section id="planos" className="py-24 px-6 bg-white border-b border-[#F1F5F9]">
+        <div className="max-w-7xl mx-auto flex flex-col items-center">
+          <div className="relative mb-4 block text-center">
+            <h2 className="text-4xl md:text-[3rem] font-headline font-bold text-[#111827] tracking-tight text-center">Conheça nossos planos</h2>
+          </div>
+          <p className="text-[#64748B] font-body text-lg text-center leading-[1.7] max-w-2xl mb-16">
+            Organização financeira e pessoal direto no WhatsApp 24h por dia.
+          </p>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full items-stretch">
+            {/* Info Card Left: Praticidade */}
+            <div className="bg-[#F8FAFC] rounded-[2rem] p-8 border border-[#E2E8F0] flex flex-col items-start shadow-sm transition-transform hover:-translate-y-1 duration-300">
+               <div className="w-12 h-12 rounded-2xl bg-[#7C3AED]/10 flex items-center justify-center mb-6">
+                  <span className="material-symbols-outlined text-[#7C3AED] text-2xl">bolt</span>
+               </div>
+               <h3 className="text-[#111827] font-headline font-extrabold text-2xl mb-4 italic uppercase tracking-tight">Agilidade Máxima</h3>
+               <p className="text-[#64748B] font-body text-[1rem] leading-[1.6] mb-6">
+                  Esqueça apps complexos. O Nico vive onde você já está: no WhatsApp. Lançar um gasto leva menos de 5 segundos.
+               </p>
+               <ul className="space-y-4 mt-auto">
+                  <li className="flex items-center gap-3 text-sm font-body font-bold text-[#111827]">
+                     <span className="w-1.5 h-1.5 rounded-full bg-[#7C3AED]"></span>
+                     Sem senha para lembrar
+                  </li>
+                  <li className="flex items-center gap-3 text-sm font-body font-bold text-[#111827]">
+                     <span className="w-1.5 h-1.5 rounded-full bg-[#7C3AED]"></span>
+                     Interface familiar
+                  </li>
+                  <li className="flex items-center gap-3 text-sm font-body font-bold text-[#111827]">
+                     <span className="w-1.5 h-1.5 rounded-full bg-[#7C3AED]"></span>
+                     Resposta instantânea
+                  </li>
+               </ul>
+            </div>
+
+            {/* Main Pricing Card: Plano Nico */}
+            <div className="bg-[#0B1120] text-white rounded-[2rem] p-8 md:p-10 shadow-[0_40px_80px_rgba(11,17,32,0.25)] flex flex-col items-start border border-[#1f2937] relative overflow-hidden group transition-transform hover:scale-[1.02] duration-300 ring-4 ring-[#7C3AED]/30 ring-offset-4 ring-offset-white">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[200px] h-[200px] bg-[#7C3AED]/20 blur-[80px] rounded-full pointer-events-none z-0"></div>
+              
+              <div className="relative z-10 w-full">
+                <div className="inline-flex items-center gap-2 bg-[#7C3AED] px-4 py-1.5 rounded-full text-xs font-headline mb-8">
+                  <span className="font-black text-white tracking-widest uppercase">PLANO COMPLETO</span>
+                </div>
+
+                <div className="flex items-baseline gap-1.5 mb-2">
+                   <span className="text-[#9ca3af] font-body font-bold text-xl">R$</span>
+                   <span className="text-white font-headline font-black text-[5rem] leading-none tracking-tighter">9,90</span>
+                   <span className="text-[#9ca3af] font-body font-medium">/mês</span>
+                </div>
+                <p className="text-[#9ca3af] text-[0.85rem] font-body mb-8 italic">Ideal para organização pessoal e familiar</p>
+
+                <div className="flex flex-col gap-3 mb-8">
+                   <p className="text-[#e5e7eb] font-body text-[0.85rem] leading-[1.5]">
+                     <span className="font-bold text-[#A78BFA]">Bônus:</span> De R$119 por R$0 — Gestão Compartilhada.
+                   </p>
+                   <p className="text-[#e5e7eb] font-body text-[0.85rem] leading-[1.5]">
+                     <span className="font-bold text-[#A78BFA]">Bônus:</span> De R$79 por R$0 — Alertas VIP 24h.
+                   </p>
+                </div>
+
+                <hr className="w-full border-[#1f2937] mb-8" />
+
+                <ul className="flex flex-col gap-3.5 mb-10 w-full">
+                   {[
+                     "Registro de compromissos e tarefas",
+                     "Registro de gastos e receitas",
+                     "Classificação automática por IA",
+                     "Lembretes ilimitados via WhatsApp",
+                     "Consultas de itens em tempo real",
+                     "Resumo diário da sua rotina"
+                   ].map((feature, i) => (
+                     <li key={i} className="flex items-start gap-3">
+                        <span className="material-symbols-outlined text-[#22c55e] text-[1.1rem] mt-0.5" style={{fontVariationSettings: "'FILL' 1, 'wght' 700"}}>check</span>
+                        <span className="text-[#e5e7eb] font-body text-[0.85rem] font-medium leading-[1.4]">{feature}</span>
+                     </li>
+                   ))}
+                </ul>
+
+                <a href="https://wa.me/assessornico?text=Quero%20assinar%20o%20plano" className="block w-full bg-[#22c55e] text-white text-center font-headline font-bold text-[1.1rem] py-4 rounded-full hover:bg-[#16a34a] transition-all duration-300 shadow-[0_15px_30px_rgba(34,197,94,0.3)] mb-4">
+                   Garanta Já
+                </a>
+                
+                <p className="w-full text-center text-[#9ca3af] text-[10px] font-body font-bold uppercase tracking-widest">
+                   Preço promocional vitalício
+                </p>
               </div>
             </div>
 
-            <div className="flex flex-col items-center md:items-end gap-6">
+            {/* Info Card Right: Segurança */}
+            <div className="bg-[#F8FAFC] rounded-[2rem] p-8 border border-[#E2E8F0] flex flex-col items-start shadow-sm transition-transform hover:-translate-y-1 duration-300">
+               <div className="w-12 h-12 rounded-2xl bg-[#22c55e]/10 flex items-center justify-center mb-6">
+                  <span className="material-symbols-outlined text-[#22c55e] text-2xl">security</span>
+               </div>
+               <h3 className="text-[#111827] font-headline font-extrabold text-2xl mb-4 italic uppercase tracking-tight">Dados Blindados</h3>
+               <p className="text-[#64748B] font-body text-[1rem] leading-[1.6] mb-6">
+                  Sua privacidade é prioridade. Utilizamos infraestrutura robusta para garantir que suas anotações estejam sempre seguras.
+               </p>
+               <ul className="space-y-4 mt-auto">
+                  <li className="flex items-center gap-3 text-sm font-body font-bold text-[#111827]">
+                     <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]"></span>
+                     Criptografia de ponta
+                  </li>
+                  <li className="flex items-center gap-3 text-sm font-body font-bold text-[#111827]">
+                     <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]"></span>
+                     Backup automático diário
+                  </li>
+                  <li className="flex items-center gap-3 text-sm font-body font-bold text-[#111827]">
+                     <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]"></span>
+                     Privacidade total (IA Only)
+                  </li>
+               </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Avaliações com Scroll Infinito (2 Fileiras) */}
+      <section id="avaliacoes" className="py-28 bg-white overflow-hidden">
+        <div className="max-w-6xl mx-auto flex flex-col items-center mb-16 px-6">
+          <div className="relative mb-6 block text-center">
+             <h2 className="text-4xl md:text-[3rem] font-headline font-bold text-[#111827] tracking-tight text-center uppercase">O QUE DIZEM NOSSOS CLIENTES</h2>
+             <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-24 h-1.5 bg-[#7C3AED] rounded-full"></div>
+          </div>
+          <p className="text-[#64748B] font-body text-lg text-center leading-[1.7] max-w-2xl mt-4">
+            Profissionais que pararam de perder tempo preenchendo planilhas e começaram a aproveitar mais a vida usando o Nico.
+          </p>
+        </div>
+
+        {/* Marquee Container with 2 Rows */}
+        <div className="relative w-full max-w-[1500px] mx-auto overflow-hidden before:absolute before:left-0 before:top-0 before:z-20 before:h-full before:w-[50px] md:before:w-[200px] before:bg-gradient-to-r before:from-white before:to-transparent after:absolute after:right-0 after:top-0 after:z-20 after:h-full after:w-[50px] md:after:w-[200px] after:bg-gradient-to-l after:from-white after:to-transparent flex flex-col gap-6">
+          
+          {/* Row 1: Scrolling Left */}
+          <div className="flex w-max animate-marquee hover:[animation-play-state:paused] gap-6 px-3">
+             {[...reviews1, ...reviews1, ...reviews1].map((review, i) => (
+               <div key={`r1-${i}`} className="flex-shrink-0 w-[350px] md:w-[400px] p-8 rounded-[1.5rem] bg-[#F1F5F9] border border-[#e2e8f0] flex flex-col justify-between transition-transform duration-300 hover:scale-[1.02] cursor-default">
+                  <div className="mb-8">
+                    <div className="flex gap-1 text-[#eab308] mb-6">
+                        {[...Array(5)].map((_, index) => (
+                           <svg key={index} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                             <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" />
+                           </svg>
+                        ))}
+                     </div>
+                    <p className="text-[#111827] font-body text-[1.05rem] leading-[1.65] font-medium">"{review.text}"</p>
+                  </div>
+                  <div className="flex items-center gap-4 border-t border-[#e2e8f0] pt-6">
+                     <div className="w-12 h-12 rounded-full bg-[#7C3AED] font-headline font-bold text-lg text-white flex items-center justify-center">
+                        {review.name.charAt(0)}
+                     </div>
+                     <div>
+                       <p className="text-[#111827] font-headline font-bold text-[0.95rem] tracking-wide">{review.name}</p>
+                       <p className="text-[#64748B] font-body font-medium text-sm">{review.role}</p>
+                     </div>
+                  </div>
+               </div>
+             ))}
+          </div>
+
+          {/* Row 2: Scrolling Right */}
+          <div className="flex w-max animate-marquee-reverse hover:[animation-play-state:paused] gap-6 px-3">
+             {[...reviews2, ...reviews2, ...reviews2].map((review, i) => (
+               <div key={`r2-${i}`} className="flex-shrink-0 w-[350px] md:w-[400px] p-8 rounded-[1.5rem] bg-[#F1F5F9] border border-[#e2e8f0] flex flex-col justify-between transition-transform duration-300 hover:scale-[1.02] cursor-default">
+                  <div className="mb-8">
+                    <div className="flex gap-1 text-[#eab308] mb-6">
+                        {[...Array(5)].map((_, index) => (
+                           <svg key={index} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                             <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" />
+                           </svg>
+                        ))}
+                     </div>
+                    <p className="text-[#111827] font-body text-[1.05rem] leading-[1.65] font-medium">"{review.text}"</p>
+                  </div>
+                  <div className="flex items-center gap-4 border-t border-[#e2e8f0] pt-6">
+                     <div className="w-12 h-12 rounded-full bg-[#A78BFA] font-headline font-bold text-lg text-[#111827] flex items-center justify-center">
+                        {review.name.charAt(0)}
+                     </div>
+                     <div>
+                       <p className="text-[#111827] font-headline font-bold text-[0.95rem] tracking-wide">{review.name}</p>
+                       <p className="text-[#64748B] font-body font-medium text-sm">{review.role}</p>
+                     </div>
+                  </div>
+               </div>
+             ))}
+          </div>
+
+        </div>
+      </section>
+
+      {/* FAQ Section */}
+      <section id="faq" className="py-24 px-6 bg-[#F1F5F9] border-t border-[#e2e8f0]">
+        <div className="max-w-4xl mx-auto">
+          <div className="relative mb-14 block text-center">
+             <h2 className="text-4xl md:text-[3rem] font-headline font-bold text-[#111827] tracking-tight text-center uppercase">PERGUNTAS FREQUENTES</h2>
+             <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-24 h-1.5 bg-[#7C3AED] rounded-full"></div>
+          </div>
+          
+          <div className="bg-white rounded-[1.5rem] p-6 md:p-10 shadow-sm border border-[#e2e8f0]">
+             {faqs.map((faq, idx) => (
+                <FAQItem key={idx} question={faq.q} answer={faq.a} />
+             ))}
+          </div>
+          
+          <div className="mt-16 text-center">
+             <p className="text-[#64748B] font-body mb-6 font-medium text-lg">Ainda tem dúvidas? Fale com suporte humano.</p>
+             <a href="https://wa.me/assessornico?text=Tenho%20d%C3%BAvidas" className="inline-flex items-center gap-3 bg-white text-[#111827] font-headline font-bold px-10 py-4 rounded-full hover:bg-[#e2e8f0] transition-colors border border-[#cbd5e1] shadow-sm tracking-wide text-sm">
+               <span className="material-symbols-outlined text-[#22c55e] text-xl">support_agent</span>
+               FALAR COM ATENDENTE
+             </a>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer Section */}
+      <footer className="bg-[#0B1120] text-white pt-24 pb-12 px-6 border-t border-[#1f2937] relative z-20">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-20">
+            {/* Brand Col */}
+            <div className="flex flex-col gap-6">
+              <a href="/" className="flex items-center -ml-2">
+                <Logo className="h-10 md:h-12" dark={true} />
+              </a>
+              <p className="text-[#94A3B8] font-body text-[1rem] leading-[1.6] max-w-sm">
+                O assistente inteligente que organiza sua vida financeira e compromissos diretamente pelo WhatsApp.
+              </p>
               <div className="flex gap-4">
-                <a className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:border-[#8a4cfc] hover:text-[#bd9dff] hover:bg-[#8a4cfc]/10 transition-all duration-300" href="#">
-                  <span className="material-symbols-outlined text-xl">share</span>
-                </a>
-                <a className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:border-[#8a4cfc] hover:text-[#bd9dff] hover:bg-[#8a4cfc]/10 transition-all duration-300" href="#">
-                  <span className="material-symbols-outlined text-xl">alternate_email</span>
-                </a>
+                 <a href="#" className="w-10 h-10 rounded-full bg-[#1F2937] flex items-center justify-center hover:bg-[#7C3AED] transition-all duration-300">
+                    <span className="material-symbols-outlined text-sm text-white">facebook</span>
+                 </a>
+                 <a href="#" className="w-10 h-10 rounded-full bg-[#1F2937] flex items-center justify-center hover:bg-[#7C3AED] transition-all duration-300">
+                    <span className="material-symbols-outlined text-sm text-white">alternate_email</span>
+                 </a>
+              </div>
+            </div>
+
+            {/* Links Col 1 */}
+            <div>
+              <h4 className="font-headline font-bold text-white mb-8 text-lg uppercase tracking-wider">Produto</h4>
+              <ul className="flex flex-col gap-4 text-[#94A3B8] font-body">
+                <li><a href="#hero" className="hover:text-[#A78BFA] transition-colors">Como funciona</a></li>
+                <li><a href="#planos" className="hover:text-[#A78BFA] transition-colors">Planos e Preços</a></li>
+                <li><a href="#avaliacoes" className="hover:text-[#A78BFA] transition-colors">Depoimentos</a></li>
+                <li><a href="#faq" className="hover:text-[#A78BFA] transition-colors">Dúvidas Comuns</a></li>
+              </ul>
+            </div>
+
+            {/* Links Col 2 */}
+            <div>
+              <h4 className="font-headline font-bold text-white mb-8 text-lg uppercase tracking-wider">Suporte</h4>
+              <ul className="flex flex-col gap-4 text-[#94A3B8] font-body">
+                <li><a href="#" className="hover:text-[#A78BFA] transition-colors">Central de Ajuda</a></li>
+                <li><a href="#" className="hover:text-[#A78BFA] transition-colors">Termos de Uso</a></li>
+                <li><a href="#" className="hover:text-[#A78BFA] transition-colors">Privacidade</a></li>
+                <li><a href="#" className="hover:text-[#A78BFA] transition-colors">Contato</a></li>
+              </ul>
+            </div>
+
+            {/* Contact Col */}
+            <div className="flex flex-col gap-6">
+              <h4 className="font-headline font-bold text-white mb-2 text-lg uppercase tracking-wider">Fale Conosco</h4>
+              <div className="flex items-center gap-4 group">
+                 <div className="w-10 h-10 rounded-full bg-[#1F2937] flex items-center justify-center group-hover:bg-[#22c55e] transition-colors">
+                    <span className="material-symbols-outlined text-white text-lg">call</span>
+                 </div>
+                 <span className="text-[#94A3B8] font-body">(91) 99126-6136</span>
+              </div>
+              <div className="flex items-center gap-4 group">
+                 <div className="w-10 h-10 rounded-full bg-[#1F2937] flex items-center justify-center group-hover:bg-[#7C3AED] transition-colors">
+                    <span className="material-symbols-outlined text-white text-lg">mail</span>
+                 </div>
+                 <span className="text-[#94A3B8] font-body">ramonsousa1301@gmail.com</span>
               </div>
             </div>
           </div>
-          
-          <div className="mt-20 pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4">
-             <p className="text-white/20 text-xs">© 2024 Assessor Nico. Todos os direitos reservados.</p>
-             <p className="text-white/20 text-xs font-light">Design by Antigravity AI</p>
+
+          <div className="pt-12 border-t border-[#1f2937] flex flex-col md:flex-row justify-between items-center gap-6">
+            <p className="text-[#64748B] font-body text-sm">
+              © 2026 Assessor Nico. Todos os direitos reservados.
+            </p>
+            <div className="flex gap-8 text-[#64748B] font-body text-sm">
+              <a href="#" className="hover:text-white transition-colors">Política de Privacidade</a>
+              <a href="#" className="hover:text-white transition-colors">Termos de Serviço</a>
+            </div>
           </div>
         </div>
       </footer>
