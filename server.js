@@ -83,26 +83,28 @@ const server = http.createServer(async (req, res) => {
         const dataAtual = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
         // Prompt do Sistema transformado para Motor Lógico JSON
-        const sysPrompt = `Você é o FIn, seu Assistente Financeiro super-poderoso no WhatsApp.
-Hoje é dia e hora exata: ${dataAtual}. BASEIE-SE NISSO para datas como "amanhã" e "hoje".
+        const sysPrompt = `Você é o Assessor Nico, um mentor financeiro pessoal e produtivo.
+Hoje é ${dataAtual}.
+Tarefas Pendentes: ${myTasksStr}
+Últimos Gastos: ${myExpStr}
 
-DADOS DO USUÁRIO AGORA:
-${myTasksStr}
-${myExpStr}
+Sua personalidade: Educada, profissional e motivadora. Você usa emojis para tornar a conversa leve, mas mantém o foco em organização financeira.
 
-SUA MISSÃO OBRIGATÓRIA:
-Você DEVE avaliar o que o usuário quer fazer, e me responder com APENAS UM CÓDIGO JSON (Nenhum outro texto fora do JSON).
+REGRAS DE OURO DA INTELIGÊNCIA:
+1. Se o usuário disser apenas "Tarefa", "Gasto" ou similar sem dados específicos, NÃO use as ações TASK ou EXPENSE. Em vez disso, use a ação "CHAT" e pergunte gentilmente os detalhes (ex: "Qual o título da tarefa?" ou "Qual o valor do gasto?").
+2. Só use TASK se tiver pelo menos o TITULO.
+3. Só use EXPENSE se tiver VALOR e DESCRIÇÃO.
+4. Para consultas (ex: "o que eu gastei?"), use a ação "CHAT" e responda com base nos dados fornecidos abaixo em 'DADOS DO USUÁRIO AGORA'.
 
-Formato JSON EXATO que você tem que me devolver:
+RESPOSTA OBRIGATÓRIA EM JSON:
 {
-  "action": "(Escolha uma: TASK | EXPENSE | NOTE | CHAT)",
+  "action": "(TASK | EXPENSE | NOTE | CHAT)",
   "parsedData": {
-     // Se for TASK: "title": "...", "due_date": "YYYY-MM-DDTHH:mm:ssZ" (Exato UTC ISO)
-     // Se for EXPENSE: "amount": 15.50 (Obrigatório ser número decimal), "description": "Comida"
-     // Se for NOTE: "text": "o texto da anotação inteira aqui"
-     // Se for CHAT (apenas conversa ou dúvidas): deixe vazio o objeto {}
+     "title": "...", "due_date": "ISO8601", 
+     "amount": 0.0, "description": "...", 
+     "text": "..." 
   },
-  "reply": "O seu texto amigável conversando com o usuário respondendo. Pode usar emoji e formatação do WhatsApp de boa."
+  "reply": "Sua resposta amigável e contextualmente rica aqui."
 }`;
 
         // Chama a Inteligência Artificial
@@ -141,13 +143,16 @@ Formato JSON EXATO que você tem que me devolver:
 
         // Executa a Mágica Bancária de acordo com o Cérebro da IA
         const { action, parsedData } = aiResponse;
+        console.log(`[${remoteJid}] Ação Identificada: ${action}`);
         
         try {
           if (action === "EXPENSE" && parsedData.amount && parsedData.description) {
+            console.log(`[${remoteJid}] Salvando Gasto: R$${parsedData.amount}`);
             await prisma.expense.create({
               data: { user_id: user.id, amount: Number(parsedData.amount), description: parsedData.description }
             });
           } else if (action === "TASK" && parsedData.title) {
+            console.log(`[${remoteJid}] Agendando Tarefa: ${parsedData.title}`);
             await prisma.task.create({
               data: { 
                 user_id: user.id, 
@@ -156,12 +161,13 @@ Formato JSON EXATO que você tem que me devolver:
               }
             });
           } else if (action === "NOTE" && parsedData.text) {
+            console.log(`[${remoteJid}] Criando Nota`);
             await prisma.note.create({
               data: { user_id: user.id, content: parsedData.text }
             });
           }
         } catch(dbErr) {
-          console.error("Erro ao salvar no DB pelo comando da IA:", dbErr);
+          console.error(`[${remoteJid}] Erro ao salvar no DB:`, dbErr);
         }
 
         // Salvo o histórico pra ele lembrar o que falou
@@ -170,18 +176,27 @@ Formato JSON EXATO que você tem que me devolver:
         }
 
         // Dispara de Volta pelo Cânion da Evolution!
-        const endpoint = `${EVO_URL}/message/sendText/${payload.instance}`;
-        await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "apikey": EVO_KEY
-          },
-          body: JSON.stringify({
-            number: remoteJid,
-            text: aiResponse.reply || "Ação executada com sucesso! 🚀"
-          })
-        });
+        const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${payload.instance}`;
+        console.log(`[${remoteJid}] Enviando resposta via Evolution para: ${endpoint}`);
+        
+        try {
+          const sendRes = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": EVO_KEY
+            },
+            body: JSON.stringify({
+              number: remoteJid,
+              text: aiResponse.reply || "Ação executada com sucesso! 🚀"
+            })
+          });
+
+          const sendResult = await sendRes.json();
+          console.log(`[${remoteJid}] Resposta da Evolution API:`, JSON.stringify(sendResult));
+        } catch (sendErr) {
+          console.error(`[${remoteJid}] Erro ao ENVIAR mensagem via Evolution:`, sendErr);
+        }
 
         return end200();
       } catch (err) {
@@ -205,5 +220,5 @@ Formato JSON EXATO que você tem que me devolver:
 });
 
 server.listen(PORT, () => {
-  console.log(`\n🚀 Servidor FIn (SaaS) Módulo 2 ativado na porta ${PORT}!`);
+  console.log(`\n🚀 Assessor Nico Ativado na porta ${PORT}!`);
 });
