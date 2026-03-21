@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import http from "http";
 import fs   from "fs";
 import path from "path";
@@ -5,7 +6,6 @@ import { fileURLToPath } from "url";
 import { PrismaClient } from "@prisma/client";
 import Stripe from "stripe";
 import './scheduler.js';
-
 
 // Inicia o ORM
 const prisma = new PrismaClient();
@@ -15,6 +15,7 @@ const PORT    = process.env.PORT || 3000;
 const EVO_URL = process.env.EVOLUTION_API_URL || "http://127.0.0.1:8080";
 const EVO_KEY = process.env.EVOLUTION_API_KEY || "FInAgentAPISecretKey_2026";
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || "SUA_CHAVE_AQUI";
+
 
 // Stripe Config
 const STRIPE_KEY = process.env.STRIPE_SECRET_KEY || "sk_test_...";
@@ -74,6 +75,7 @@ const server = http.createServer(async (req, res) => {
       
       try {
         const payload = JSON.parse(body);
+        console.log(`📡 [Evolution Webhook] Evento: ${payload.event}`);
         
         // Apenas mensagens novas
         if (payload.event !== "messages.upsert") return end200();
@@ -82,8 +84,11 @@ const server = http.createServer(async (req, res) => {
         const remoteJid = dataKey.remoteJid || "";
         const fromMe = dataKey.fromMe || false;
 
+        console.log(`📩 [Evolution Webhook] Nova mensagem de ${remoteJid}${fromMe ? ' (Enviada por mim, aguardando)' : ''}`);
+        
         // Ignora grupos e bots
         if (fromMe || typeof remoteJid !== "string" || remoteJid.includes("@g.us")) return end200();
+
         
         const msgNode = payload.data?.message || payload.data;
         const msgText = msgNode.conversation || msgNode.extendedTextMessage?.text || msgNode.imageMessage?.caption || "";
@@ -182,12 +187,20 @@ RESPOSTA OBRIGATÓRIA EM JSON:
         });
 
         const dsData = await upstream.json();
+        console.log(`🤖 [DeepSeek] Status: ${upstream.status}`);
+        
+        if (!upstream.ok) {
+           console.error("❌ Erro na DeepSeek API:", JSON.stringify(dsData));
+           return end200(); // Encerra mas logou o erro
+        }
+
         let rawContent = dsData.choices?.[0]?.message?.content || "{}";
+        console.log(`🤖 [DeepSeek] Resposta Raw: ${rawContent.substring(0, 100)}...`);
         
         // Limpa possíveis marcações markdown que a IA cuspir "```json { ... } ```"
         rawContent = rawContent.replace(/```json/g, "").replace(/```/g, "").trim();
 
-        let aiResponse;
+
         try {
            aiResponse = JSON.parse(rawContent);
         } catch(e) {
