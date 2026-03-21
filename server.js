@@ -74,10 +74,10 @@ const server = http.createServer(async (req, res) => {
 
         // Coleta itens atuais do usuário para a IA ter "consciência" na hora de responder
         const pendingTasks = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, take: 10 });
-        const expenses = await prisma.expense.findMany({ where: { user_id: user.id }, orderBy: { date: 'desc' }, take: 5 });
+        const expenses = await prisma.expense.findMany({ where: { user_id: user.id }, orderBy: { date: 'desc' }, take: 20 });
 
         const myTasksStr = pendingTasks.length > 0 ? "Tarefas ativas: " + pendingTasks.map(t => `- ${t.title}`).join(", ") : "Nenhuma tarefa pendente.";
-        const myExpStr = expenses.length > 0 ? "Últimos 5 gastos: " + expenses.map(e => `- R$${e.amount} (${e.description})`).join(", ") : "Nenhum gasto recente.";
+        const myExpStr = expenses.length > 0 ? "Últimos 20 gastos: " + expenses.map(e => `- R$${e.amount} (${e.description})`).join(", ") : "Nenhum gasto recente.";
 
         // --- Data e Hora em Português-BR para contexto automático ---
         const dataAtual = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
@@ -91,18 +91,21 @@ Tarefas Pendentes: ${myTasksStr}
 Sua personalidade: Educada, profissional e motivadora. Você usa emojis para tornar a conversa leve, mas mantém o foco em organização financeira.
 
 REGRAS DE OURO DA INTELIGÊNCIA:
-1. Se o usuário disser apenas "Tarefa", "Gasto" ou similar sem dados específicos, NÃO use as ações TASK ou EXPENSE. Em vez disso, use a ação "CHAT" e pergunte gentilmente os detalhes (ex: "Qual o título da tarefa?" ou "Qual o valor do gasto?").
-2. Só use TASK se tiver pelo menos o TITULO.
-3. Só use EXPENSE se tiver VALOR e DESCRIÇÃO.
-4. Para consultas (ex: "o que eu gastei?"), use a ação "CHAT" e responda com base nos dados fornecidos abaixo em 'DADOS DO USUÁRIO AGORA'.
+1. Se o usuário for vago, use CHAT para pedir detalhes.
+2. TASK exige TITULO. EXPENSE exige VALOR e DESCRIÇÃO.
+3. PROVA DE ERROS: Se o usuário digitar com erros (ex: "acadmia"), CORRIJA o termo (ex: "academia") ao gerar 'searchTerm', 'title' ou 'description'.
+4. NORMALIZAÇÃO: Ao salvar itens (EXPENSE/TASK), use nomes limpos e corretos (ex: "Academia") para facilitar buscas. 
+5. CONSULTAS: Verifique primeiro os dados abaixo. Se não encontrar, use QUERY para buscar no banco histórico.
+6. Se QUERY falhar, mas houver algo similar na memória curta (20 itens), informe o usuário.
 
 RESPOSTA OBRIGATÓRIA EM JSON:
 {
-  "action": "(TASK | EXPENSE | NOTE | CHAT)",
+  "action": "(TASK | EXPENSE | NOTE | CHAT | QUERY)",
   "parsedData": {
      "title": "...", "due_date": "ISO8601", 
      "amount": 0.0, "description": "...", 
-     "text": "..." 
+     "text": "...",
+     "searchTerm": "..."
   },
   "reply": "Sua resposta amigável e contextualmente rica aqui."
 }`;
@@ -165,6 +168,24 @@ RESPOSTA OBRIGATÓRIA EM JSON:
             await prisma.note.create({
               data: { user_id: user.id, content: parsedData.text }
             });
+          } else if (action === "QUERY") {
+            const searchTerm = (parsedData.searchTerm || parsedData.description || "").trim();
+            console.log(`[${remoteJid}] Buscando Gasto: ${searchTerm}`);
+            const results = await prisma.expense.findMany({
+              where: { 
+                user_id: user.id,
+                description: { contains: searchTerm, mode: 'insensitive' }
+              },
+              orderBy: { date: 'desc' },
+              take: 10
+            });
+            
+            if (results.length > 0) {
+               const list = results.map(e => `• *R$${e.amount.toFixed(2)}* - ${e.description} (_${e.date.toLocaleDateString('pt-BR')}_)`).join("\n");
+               aiResponse.reply = `✅ *Encontrei estas informações para "${searchTerm}":*\n\n${list}`;
+            } else {
+               aiResponse.reply = `Puxa, não encontrei nenhum gasto registrado como "${searchTerm}" no meu histórico completo. 🧐\n\n_Dica: Tente buscar por um termo mais genérico._`;
+            }
           }
         } catch(dbErr) {
           console.error(`[${remoteJid}] Erro ao salvar no DB:`, dbErr);
