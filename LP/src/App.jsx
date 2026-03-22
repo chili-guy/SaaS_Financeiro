@@ -316,12 +316,7 @@ function App() {
                 O sistema identifica o horário e te envia uma mensagem de lembrete no WhatsApp exatamente quando você precisar. Nunca mais esqueça uma reunião ou compromisso.
               </p>
             </div>
-            <div className="pt-4 flex items-start text-left">
-              <a href="https://wa.me/assessornico" className="bg-[#111827] text-white px-10 py-4 rounded-full font-headline font-bold text-[0.95rem] hover:bg-black transition-all duration-300 transform active:scale-95 shadow-xl shadow-black/10 uppercase tracking-widest flex items-center gap-3 w-fit">
-                ATIVAR SECRETÁRIO
-                <span className="material-symbols-outlined text-lg">event_available</span>
-              </a>
-            </div>
+
           </div>
           
           {/* Visual Content: Abstract Schedule */}
