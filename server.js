@@ -334,50 +334,26 @@ INSTRUÇÃO DE CONTEXTO:
         // Salvo o histórico
         await prisma.message.create({ data: { user_id: user.id, role: "assistant", content: finalReply } });
 
-        // Dispara de Volta pelo Cânion da Evolution!
-        const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/${hasChange ? 'sendButtons' : 'sendText'}/${payload.instance}`;
-        
-        let bodyPayload = { 
-          number: remoteJid, 
-          title: "Assessor Nico", // Título profissional no topo
-          text: finalReply,
-          description: finalReply,
-          viewOnce: false // Garante que a mensagem apareça no WhatsApp Web/Desktop
-        };
+        // --- Envio para Evolution (Texto Puro = 100% Visibilidade) ---
+        const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${payload.instance}`;
+        const bodyPayload = { number: remoteJid, text: finalReply };
 
-        if (hasChange) {
-          const itemTitle = lastActionableData.title || lastActionableData.description || lastActionableData.searchTerm || "";
-          bodyPayload.buttons = [
-            { "type": "reply", "displayText": "✏️ Editar", "id": `Editar ${itemTitle}` },
-            { "type": "reply", "displayText": "🗑️ Excluir", "id": `Excluir ${itemTitle}` }
-          ];
-          bodyPayload.footer = "Assessor Nico • FIn";
-        }
-
-        // --- Envio para Evolution com Timeout de Segurança (QA Approved) ---
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s de limite
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
 
         try {
           const sendRes = await fetch(endpoint, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "apikey": EVO_KEY
-            },
+            headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
             body: JSON.stringify(bodyPayload),
             signal: controller.signal
           });
           clearTimeout(timeoutId);
 
-          const errData = await sendRes.json().catch(() => ({}));
-          console.log(`[Evolution API] Status: ${sendRes.status} | Resposta:`, JSON.stringify(errData));
+          const resData = await sendRes.json().catch(() => ({}));
+          console.log(`[Evolution API] Status: ${sendRes.status}`);
         } catch (sendErr) {
-          if (sendErr.name === 'AbortError') {
-            console.error(`[Evolution API] Timeout ao enviar.`);
-          } else {
-            console.error(`[Evolution API] Erro de Rede:`, sendErr.message);
-          }
+          console.error(`[Evolution API] Erro no envio:`, sendErr.message);
         }
 
         return end200();
