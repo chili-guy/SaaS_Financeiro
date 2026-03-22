@@ -362,8 +362,8 @@ function App() {
         <div className="absolute top-20 right-[15%] w-24 h-24 glass-shape rounded-3xl rotate-12 float-slow opacity-20 hidden lg:block"></div>
         <div className="absolute bottom-40 left-[10%] w-16 h-16 glass-shape rounded-full float-medium opacity-20 hidden lg:block"></div>
 
-        {/* Spline 3D Animation - "Free" on the Right Side (Desktop) */}
-        <div className="absolute right-[-10%] top-1/2 -translate-y-1/2 w-[70%] h-full z-0 pointer-events-auto hidden lg:block">
+        {/* Spline 3D Animation - Robot appearing on mobile too */}
+        <div className="absolute left-1/2 -translate-x-1/2 lg:left-auto lg:right-[-10%] top-1/2 -translate-y-1/2 w-[130%] lg:w-[70%] h-[110%] lg:h-full z-0 pointer-events-auto">
            <spline-viewer url="https://prod.spline.design/Xx9X55DsHvKD5uP9/scene.splinecode"></spline-viewer>
         </div>
 
