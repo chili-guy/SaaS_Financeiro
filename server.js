@@ -235,22 +235,40 @@ RESPOSTA OBRIGATÓRIA EM JSON:
               data: { user_id: user.id, content: parsedData.text }
             });
           } else if (action === "QUERY") {
-            const searchTerm = (parsedData.searchTerm || parsedData.description || "").trim();
-            console.log(`[${remoteJid}] Buscando Gasto: ${searchTerm}`);
-            const results = await prisma.expense.findMany({
-              where: { 
-                user_id: user.id,
-                description: { contains: searchTerm, mode: 'insensitive' }
-              },
-              orderBy: { date: 'desc' },
-              take: 10
-            });
+            const searchTerm = (parsedData.searchTerm || parsedData.description || "").trim().toLowerCase();
+            const isTaskSearch = searchTerm.includes("tarefa") || searchTerm.includes("lembrete") || searchTerm.includes("pendente");
             
-            if (results.length > 0) {
-               const list = results.map(e => `• *R$${e.amount.toFixed(2)}* - ${e.description} (_${e.date.toLocaleDateString('pt-BR')}_)`).join("\n");
-               aiResponse.reply = `✅ *Encontrei estas informações para "${searchTerm}":*\n\n${list}`;
+            if (isTaskSearch) {
+              console.log(`[${remoteJid}] Buscando Tarefas: ${searchTerm}`);
+              const tasks = await prisma.task.findMany({
+                where: { user_id: user.id, completed: false },
+                orderBy: { due_date: 'asc' },
+                take: 10
+              });
+              
+              if (tasks.length > 0) {
+                 const list = tasks.map(t => `• *${t.title}* ${t.due_date ? `(_${new Date(t.due_date).toLocaleString('pt-BR')}_)` : ""}`).join("\n");
+                 aiResponse.reply = `✅ *Aqui estão suas tarefas pendentes:*\n\n${list}`;
+              } else {
+                 aiResponse.reply = `Você não tem nenhuma tarefa pendente no momento! Tudo dominado. 🚀`;
+              }
             } else {
-               aiResponse.reply = `Puxa, não encontrei nenhum gasto registrado como "${searchTerm}" no meu histórico completo. 🧐\n\n_Dica: Tente buscar por um termo mais genérico._`;
+              console.log(`[${remoteJid}] Buscando Gasto: ${searchTerm}`);
+              const results = await prisma.expense.findMany({
+                where: { 
+                  user_id: user.id,
+                  description: { contains: searchTerm, mode: 'insensitive' }
+                },
+                orderBy: { date: 'desc' },
+                take: 10
+              });
+              
+              if (results.length > 0) {
+                 const list = results.map(e => `• *R$${e.amount.toFixed(2)}* - ${e.description} (_${e.date.toLocaleDateString('pt-BR')}_)`).join("\n");
+                 aiResponse.reply = `✅ *Encontrei estas informações de gastos para "${searchTerm}":*\n\n${list}`;
+              } else {
+                 aiResponse.reply = `Puxa, não encontrei nenhum gasto registrado como "${searchTerm}" no meu histórico. 🧐\n\n_Dica: Se queria ver suas tarefas, tente perguntar "quais são minhas tarefas"._`;
+              }
             }
           }
         } catch(dbErr) {
