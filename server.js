@@ -279,13 +279,25 @@ INSTRUÇÃO DE CONTEXTO:
                 const tasks = await prisma.task.count({ where: { user_id: user.id, completed: false } });
                 aiResponse.reply = `📊 *Resumo Geral:* \n\n*Total de Gastos:* R$ ${total.toFixed(2)}\n*Tarefas Pendentes:* ${tasks}\n\nAlgo mais?`;
               } else {
-                const isTaskSearch = searchTerm.includes("tarefa") || searchTerm.includes("lembrete") || searchTerm.includes("pendente") || searchTerm.includes("resumo");
+                // QA: Se a busca for genérica (lista, minhas tarefas, resumo), retorna tudo
+                const isGeneric = !searchTerm || ["lista", "tarefas", "minhas tarefas", "resumo", "pendentes", "tudo"].includes(searchTerm);
+                const isTaskSearch = isGeneric || searchTerm.includes("tarefa") || searchTerm.includes("lembrete");
+
                 if (isTaskSearch) {
+                   const cleanTerm = searchTerm.replace(/tarefa|lembrete|pendente|resumo|lista|minhas/g, "").trim();
                    const tasks = await prisma.task.findMany({
-                     where: { user_id: user.id, completed: false, title: { contains: searchTerm.replace(/tarefa|lembrete|pendente|resumo/g, "").trim(), mode: 'insensitive' } },
-                     orderBy: { due_date: 'asc' }, take: 20
+                     where: { 
+                       user_id: user.id, 
+                       completed: false, 
+                       ...(cleanTerm ? { title: { contains: cleanTerm, mode: 'insensitive' } } : {}) 
+                     },
+                     orderBy: { due_date: 'asc' }, take: 30
                    });
-                   if (tasks.length > 0) aiResponse.reply = `✅ *Tarefas:*\n` + tasks.map(t => `• *${t.title}* ${t.due_date ? `(_${new Date(t.due_date).toLocaleString('pt-BR')}_)` : ""}`).join("\n");
+                   if (tasks.length > 0) {
+                     aiResponse.reply = `✅ *Suas Tarefas:*\n` + tasks.map(t => `• *${t.title}* ${t.due_date ? `(_${new Date(t.due_date).toLocaleString('pt-BR')}_)` : ""}`).join("\n");
+                   } else {
+                     aiResponse.reply = "Você não tem nenhuma tarefa pendente no momento! 🎉";
+                   }
                 } else {
                    const expenses = await prisma.expense.findMany({
                      where: { user_id: user.id, description: { contains: searchTerm, mode: 'insensitive' } },
@@ -315,12 +327,17 @@ INSTRUÇÃO DE CONTEXTO:
                 const nt = t.title.toLowerCase().trim();
                 if (seenTitles.has(nt)) { await prisma.task.delete({ where: { id: t.id } }); removedCount++; } else { seenTitles.add(nt); }
               }
-              aiResponse.reply = `✨ *Limpeza concluída!* Removidos ${removedCount} itens.`;
+              aiResponse.reply = `✨ *Limpeza de Duplicatas:* Removidos ${removedCount} itens repetidos.`;
             } else if (action === "DELETE") {
               const search = parsedData.title || parsedData.searchTerm || "";
-              const dt = await prisma.task.deleteMany({ where: { user_id: user.id, title: { contains: search, mode: 'insensitive' } } });
-              const de = await prisma.expense.deleteMany({ where: { user_id: user.id, description: { contains: search, mode: 'insensitive' } } });
-              aiResponse.reply = `🗑️ *Removido:* ${dt.count + de.count} itens de "${search}".`;
+              if (search.toLowerCase().includes("tudo") || search.toLowerCase().includes("todas")) {
+                await prisma.task.deleteMany({ where: { user_id: user.id } });
+                aiResponse.reply = `🗑️ *Tudo limpo!* Todas as tarefas foram removidas.`;
+              } else {
+                const dt = await prisma.task.deleteMany({ where: { user_id: user.id, title: { contains: search, mode: 'insensitive' } } });
+                const de = await prisma.expense.deleteMany({ where: { user_id: user.id, description: { contains: search, mode: 'insensitive' } } });
+                aiResponse.reply = `🗑️ *Removido:* ${dt.count + de.count} itens de "${search}".`;
+              }
               hasChange = true;
             }
           } catch(dbErr) { 
