@@ -155,6 +155,7 @@ REGRAS DE OURO:
 5. LEMBRETES ATIVOS (PODER REAL): Você POSSUI um sistema de agendamento automático. Se ele pedir "Me lembre de X às 14h", salve como TASK e diga: "Agendado para as 14h. Te aviso! 🔔".
 6. PERSISTÊNCIA: Nunca diga que "nada fica salvo". Use a ação "CHAT" para responder usando os dados acima.
 7. Se o usuário for vago ao pedir um gasto ou tarefa, diga que já salvou e peça confirmação.
+8. PROATIVIDADE EM LEMBRETES: Sempre que o usuário criar uma tarefa sem horário, pergunte: "Que horas quer que eu te lembre?".
 
 RESPOSTA OBRIGATÓRIA EM JSON:
 {
@@ -256,20 +257,20 @@ INSTRUÇÃO DE CONTEXTO:
               if (isTaskSearch) {
                  const tasks = await prisma.task.findMany({
                    where: { user_id: user.id, completed: false, title: { contains: searchTerm.replace(/tarefa|lembrete|pendente|resumo/g, "").trim(), mode: 'insensitive' } },
-                   orderBy: { due_date: 'asc' }, take: 10
+                   orderBy: { due_date: 'asc' }, take: 20
                  });
                  if (tasks.length > 0) {
-                    aiResponse.reply = `✅ *Tarefas encontradas:*\n\n` + tasks.map(t => `• *${t.title}*`).join("\n");
+                    aiResponse.reply = `✅ *Tarefas encontradas:*\n\n` + tasks.map(t => `• *${t.title}* ${t.due_date ? `(_${new Date(t.due_date).toLocaleString('pt-BR')}_)` : "(_Sem data_)"}`).join("\n");
                  } else {
                     aiResponse.reply = `Não encontrei nenhuma tarefa correspondente a "${searchTerm}". 🧐`;
                  }
               } else {
                  const expenses = await prisma.expense.findMany({
                    where: { user_id: user.id, description: { contains: searchTerm, mode: 'insensitive' } },
-                   orderBy: { date: 'desc' }, take: 10
+                   orderBy: { date: 'desc' }, take: 15
                  });
                  if (expenses.length > 0) {
-                    aiResponse.reply = `✅ *Gastos encontrados:*\n\n` + expenses.map(e => `• *R$${e.amount}* - ${e.description}`).join("\n");
+                    aiResponse.reply = `✅ *Gastos encontrados:*\n\n` + expenses.map(e => `• *R$${e.amount.toFixed(2)}* - ${e.description} (_${e.date.toLocaleDateString('pt-BR')}_)`).join("\n");
                  } else {
                     // Fallback: busca na tabela de tarefas se não achou gastos
                     const fallbackTasks = await prisma.task.findMany({
@@ -277,7 +278,7 @@ INSTRUÇÃO DE CONTEXTO:
                       take: 5
                     });
                     if (fallbackTasks.length > 0) {
-                      aiResponse.reply = `Não achei gastos, mas encontrei estas tarefas: \n` + fallbackTasks.map(t => `• *${t.title}*`).join("\n");
+                      aiResponse.reply = `Não achei gastos, mas encontrei estas tarefas: \n` + fallbackTasks.map(t => `• *${t.title}* ${t.due_date ? `(_${new Date(t.due_date).toLocaleString('pt-BR')}_)` : ""}`).join("\n");
                     } else {
                       aiResponse.reply = `Não encontrei nenhum registro de gasto ou tarefa para "${searchTerm}". 🧐`;
                     }
