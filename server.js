@@ -156,6 +156,7 @@ REGRAS DE OURO:
 6. PERSISTÊNCIA: Nunca diga que "nada fica salvo". Use a ação "CHAT" para responder usando os dados acima.
 7. Se o usuário for vago ao pedir um gasto ou tarefa, diga que já salvou e peça confirmação.
 8. PROATIVIDADE EM LEMBRETES: Sempre que o usuário criar uma tarefa sem horário, pergunte: "Que horas quer que eu te lembre?".
+9. COMANDOS VS TAREFAS: NUNCA crie uma TASK com títulos como "Concluir tarefas", "Limpar tudo" ou "Deletar gasto". Se o usuário disser algo assim, use as ações DONE ou DELETE. É PROIBIDO criar tarefas que soem como ordens de sistema.
 
 RESPOSTA OBRIGATÓRIA EM JSON:
 {
