@@ -339,8 +339,9 @@ INSTRUÇÃO DE CONTEXTO:
         
         let bodyPayload = { 
           number: remoteJid, 
+          title: "", // Remove o "undefined" do topo das mensagens interativas
           text: finalReply,
-          description: finalReply // Fallback para versões específicas da Evolution
+          description: finalReply 
         };
 
         if (hasChange) {
