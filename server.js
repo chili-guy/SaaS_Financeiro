@@ -156,15 +156,22 @@ REGRAS DE OURO:
 
 RESPOSTA OBRIGATÓRIA EM JSON:
 {
-  "action": "(TASK | EXPENSE | NOTE | CHAT | QUERY)",
+  "action": "(TASK | EXPENSE | NOTE | CHAT | QUERY | DONE)",
   "parsedData": {
      "title": "...", "due_date": "ISO8601", 
      "amount": 0.0, "description": "...", 
      "text": "...",
-     "searchTerm": "..."
+     "searchTerm": "...",
+     "taskId": "..." 
   },
   "reply": "Sua resposta amigável e rica em contexto aqui."
-}`;
+}
+
+INSTRUÇÃO IMPORTANTE SOBRE GASTOS VS TAREFAS:
+- Use EXPENSE apenas para dinheiro que JÁ FOI GASTO ou pago NO MOMENTO.
+- Use TASK para compromissos, lembretes ou DÍVIDAS/PAGAMENTOS FUTUROS. 
+- Se o usuário falar de um valor com data futura, registre apenas como TASK.
+- Se o usuário pedir para 'concluir', 'marcar como feito' ou 'ja paguei' uma tarefa, use a ação DONE e informe o taskId (se souber) ou o título no campo title.`;
 
         // Chama a Inteligência Artificial
         const upstream = await fetch("https://api.deepseek.com/v1/chat/completions", {
@@ -267,7 +274,39 @@ RESPOSTA OBRIGATÓRIA EM JSON:
                  const list = results.map(e => `• *R$${e.amount.toFixed(2)}* - ${e.description} (_${e.date.toLocaleDateString('pt-BR')}_)`).join("\n");
                  aiResponse.reply = `✅ *Encontrei estas informações de gastos para "${searchTerm}":*\n\n${list}`;
               } else {
-                 aiResponse.reply = `Puxa, não encontrei nenhum gasto registrado como "${searchTerm}" no meu histórico. 🧐\n\n_Dica: Se queria ver suas tarefas, tente perguntar "quais são minhas tarefas"._`;
+                 aiResponse.reply = `Puxa, não encontrei nenhum registro de gasto para "${searchTerm}". 🧐\n\n_Dica: Se queria ver suas tarefas, tente perguntar "quais são minhas tarefas"._`;
+              }
+            }
+          } else if (action === "DONE") {
+            const search = parsedData.taskId || parsedData.title || "";
+            console.log(`[${remoteJid}] Concluindo tarefa: ${search}`);
+            
+            // Busca a tarefa mais recente com esse nome se não houver ID
+            const task = await prisma.task.findFirst({
+              where: { 
+                user_id: user.id, 
+                completed: false,
+                title: { contains: search, mode: 'insensitive' }
+              },
+              orderBy: { created_at: 'desc' }
+            });
+
+            if (task) {
+              await prisma.task.update({
+                where: { id: task.id },
+                data: { completed: true }
+              });
+              aiResponse.reply = `✅ *Tarefa Concluída!* \n\nMarquei "${task.title}" como feita. Mandou bem! 🚀`;
+            } else {
+              // Tenta concluir TODAS se o usuário pediu especificamente (opcional, baseado no contexto)
+              if (search.toLowerCase().includes("todas") || search.toLowerCase().includes("tudo")) {
+                await prisma.task.updateMany({
+                  where: { user_id: user.id, completed: false },
+                  data: { completed: true }
+                });
+                aiResponse.reply = `✅ *Tudo limpo!* Concluí todas as suas tarefas pendentes de uma vez. 🎉`;
+              } else {
+                aiResponse.reply = `Não encontrei nenhuma tarefa pendente com o nome "${search}" para concluir. 🧐`;
               }
             }
           }
