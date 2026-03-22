@@ -77,6 +77,8 @@ async function processNicoCore(remoteJid, msgText, instance) {
     const myExpStr   = expenses.length > 0 ? expenses.map(e => `R$${e.amount} (${e.description})`).join(", ") : "Nenhum gasto recente";
     const dataAtual  = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
+    const isPaying  = /pagar|assinar|assinatura|checkout|pix/i.test(msgText);
+
     // 3. System Prompt (Agora com Trial awareness e PAY action)
     const sysPrompt = `Seu nome é Assessor Nico, um mentor financeiro inteligente e parceiro de organização.
 Hoje é ${dataAtual}.
@@ -86,6 +88,8 @@ DADOS DO USUÁRIO (ESTADO ATUAL DO SISTEMA):
 - Status: ${user.status === "ACTIVE" ? "ASSINANTE ATIVO" : `TESTE GRÁTIS (${daysLeft <= 0 ? "Expirado" : daysLeft + " dias restantes"})`}
 - Tarefas Pendentes: ${myTasksStr}
 - Últimos Gastos: ${myExpStr}
+
+${isPaying ? "CRÍTICO: O usuário quer PAGAR ou ASSINAR agora. Sua resposta DEVE ser breve e você DEVE incluir a ação {\"action\": \"PAY\"} no array de actions!" : ""}
 
 Sua personalidade: Amigo Educado, prestativo e um Mentor financeiro elegante.
 
