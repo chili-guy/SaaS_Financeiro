@@ -95,6 +95,7 @@ function FAQItem({ question, answer }) {
 }
 
 function App() {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [scrollY, setScrollY] = useState(0);
 
   useEffect(() => {
@@ -107,8 +108,8 @@ function App() {
     <div className="bg-white text-[#111827] font-body selection:bg-[#7C3AED]/20 selection:text-[#7C3AED] overflow-x-hidden">
       
       {/* Navigation */}
-      <nav className="relative w-full z-50 bg-white border-b border-[#F1F5F9]/20">
-        <div className="max-w-7xl mx-auto flex justify-between items-center px-6 py-6 md:py-8">
+      <nav className={`fixed w-full z-[100] transition-all duration-300 ${scrollY > 50 ? 'bg-white/90 backdrop-blur-xl shadow-sm border-b border-[#F1F5F9]' : 'bg-transparent'}`}>
+        <div className="max-w-7xl mx-auto flex justify-between items-center px-6 py-6 md:py-6">
           {/* Brand Logo - Nico Assessor */}
           <a href="/" className="flex items-center">
             <Logo className="h-8 md:h-12" />
@@ -121,22 +122,31 @@ function App() {
             <a className="hover:text-[#7C3AED] transition-colors" href="#planos">Planos</a>
           </div>
           
-          {/* Actions */}
+          {/* Actions - Login Removed */}
           <div className="flex items-center gap-4">
-            <a className="bg-[#7C3AED] text-white px-5 md:px-7 py-2 md:py-2.5 rounded-full text-[0.8rem] md:text-[0.9rem] font-body font-semibold hover:bg-[#4C1D95] transition-all duration-300 flex items-center gap-2 transform active:scale-95" href="#">
-              <span className="material-symbols-outlined text-[18px]">login</span>
-              <span className="hidden sm:inline">Login</span>
-            </a>
-            {/* Mobile Menu Icon (Visual Only) */}
-            <button className="lg:hidden text-[#111827]">
-              <span className="material-symbols-outlined text-3xl">menu</span>
+            <button 
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="lg:hidden text-[#111827] p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <span className="material-symbols-outlined text-3xl">{isMenuOpen ? 'close' : 'menu'}</span>
             </button>
           </div>
+        </div>
+
+        {/* Mobile Menu Overlay */}
+        <div className={`lg:hidden absolute top-full left-0 w-full bg-white border-b border-[#F1F5F9] shadow-xl transition-all duration-300 ${isMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible h-0 overflow-hidden'}`}>
+           <div className="flex flex-col p-8 space-y-6 font-headline font-bold text-center">
+              <a onClick={() => setIsMenuOpen(false)} className="text-xl text-[#111827] hover:text-[#7C3AED]" href="#como-funciona">Como funciona</a>
+              <a onClick={() => setIsMenuOpen(false)} className="text-xl text-[#111827] hover:text-[#7C3AED]" href="#avaliacoes">Avaliações</a>
+              <a onClick={() => setIsMenuOpen(false)} className="text-xl text-[#111827] hover:text-[#7C3AED]" href="#planos">Planos</a>
+              <hr className="border-[#F1F5F9]" />
+              <a href="https://wa.me/assessornico" className="bg-[#22c55e] text-white py-4 rounded-full text-lg shadow-lg shadow-[#22c55e]/20">Começar Agora</a>
+           </div>
         </div>
       </nav>
 
       {/* Hero Section */}
-      <section className="relative pt-12 md:pt-20 pb-0 flex flex-col items-center justify-center text-center px-6 overflow-hidden bg-white" id="como-funciona">
+      <section className="relative pt-24 md:pt-40 pb-0 flex flex-col items-center justify-center text-center px-6 overflow-hidden bg-white" id="como-funciona">
         <div className="max-w-[1000px] relative z-10 mx-auto flex flex-col items-center">
           
           {/* Top subtle text */}
@@ -145,7 +155,7 @@ function App() {
           </p>
           
           {/* Main Headline (Responsive) */}
-          <h1 className="text-[2.2rem] sm:text-[2.8rem] md:text-[3.8rem] font-headline font-black leading-[1.1] md:leading-[1.05] tracking-tighter text-[#111827] mb-12">
+          <h1 className="text-[2.2rem] sm:text-[2.8rem] md:text-[3.8rem] font-headline font-black leading-[1.1] md:leading-[1.05] tracking-tighter text-[#111827] mb-8">
             Tenha um assessor pessoal <span className="md:block text-[#7C3AED]">trabalhando 24h</span> pra você
           </h1>
 
@@ -176,7 +186,7 @@ function App() {
         </div>
 
         {/* Hero Phones - Uniform Tri-Mockup Layout */}
-        <div className="relative w-full max-w-7xl mx-auto h-auto z-10 flex flex-wrap justify-center gap-6 md:gap-12 px-4 items-center mb-24 overflow-visible">
+        <div className="relative w-full max-w-7xl mx-auto h-auto z-10 flex flex-wrap justify-center gap-6 md:gap-12 px-4 items-center mb-12 md:mb-24 overflow-visible">
           
           {/* Left Phone (Uniform Size) */}
           <div className="w-[300px] sm:w-[320px] z-10 hidden lg:block transition-all duration-500 hover:-translate-y-2 rounded-[3rem] shadow-[0_30px_60px_rgba(0,0,0,0.3)]">
@@ -186,8 +196,8 @@ function App() {
           </div>
           
           {/* Center Phone (Uniform Size) */}
-          <div className="w-[92%] sm:w-[320px] z-20 transition-all duration-500 hover:-translate-y-2 rounded-[3.2rem] shadow-[0_40px_80px_rgba(0,0,0,0.4)]">
-              <div className="rounded-[3.2rem] bg-[#111] border-[6px] md:border-[10px] border-[#222] overflow-hidden aspect-[9/19] relative">
+          <div className="w-full sm:w-[320px] z-20 transition-all duration-500 hover:-translate-y-2 rounded-[3.2rem] shadow-[0_40px_80px_rgba(0,0,0,0.4)] scale-[1.12] sm:scale-100">
+              <div className="rounded-[3.2rem] bg-[#111] border-[4px] sm:border-[10px] border-[#222] overflow-hidden aspect-[9/19] relative">
                 <ChatMockup />
                 {/* Visual Glow */}
                 <div className="absolute -inset-20 bg-[#7C3AED]/15 blur-[100px] pointer-events-none -z-10 rounded-full"></div>
@@ -232,8 +242,8 @@ function App() {
       </section>
 
       {/* Block 1: FINANCEIRO */}
-      <section className="py-32 px-6 bg-white overflow-hidden relative" id="financeiro">
-        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-20">
+      <section className="py-16 md:py-32 px-6 bg-white overflow-hidden relative" id="financeiro">
+        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
           {/* Text Content */}
           <div className="flex-1 space-y-8 lg:max-w-[540px]">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#7C3AED]/10 text-[#7C3AED] text-[0.7rem] font-bold tracking-widest uppercase">
@@ -241,7 +251,7 @@ function App() {
               Gestão Financeira
             </div>
             <h2 className="text-[2.8rem] md:text-[3.8rem] font-headline font-black leading-[1.05] text-[#111827] tracking-tighter">
-              Organização <br /><span className="text-[#64748B]">sem planilhas.</span>
+              Organização <br /><span className="text-[#7C3AED]">sem planilhas.</span>
             </h2>
             <div className="space-y-6 text-[#64748B] text-[1.1rem] font-body leading-relaxed">
               <p>
@@ -287,8 +297,8 @@ function App() {
       </section>
 
       {/* Block 2: COMPROMISSOS */}
-      <section className="py-32 px-6 bg-[#F8FAFC] overflow-hidden relative" id="compromissos">
-        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row-reverse items-center gap-20">
+      <section className="py-16 md:py-32 px-6 bg-[#F8FAFC] overflow-hidden relative" id="compromissos">
+        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row-reverse items-center gap-12 lg:gap-20">
           {/* Text Content */}
           <div className="flex-1 space-y-8 lg:max-w-[540px]">
              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#111827]/5 text-[#111827] text-[0.7rem] font-bold tracking-widest uppercase">
@@ -340,7 +350,7 @@ function App() {
       </section>
 
       {/* Block 3: Registre tudo no WhatsApp - Redesigned for Premium Look */}
-      <section className="py-32 px-6 bg-[#F8FAFC] relative overflow-hidden border-b border-[#F1F5F9]" id="tecnologia">
+      <section className="py-16 md:py-32 px-6 bg-[#F8FAFC] relative overflow-hidden border-b border-[#F1F5F9]" id="tecnologia">
         {/* IBM-style Grid Background */}
         <div className="absolute inset-0 opacity-[0.4] pointer-events-none" 
              style={{ 
@@ -427,7 +437,7 @@ function App() {
       </section>
 
       {/* Block 4: Inteligência e Tecnologia */}
-      <section className="py-24 px-6 bg-[#F1F5F9] border-b border-white">
+      <section className="py-16 md:py-32 px-6 bg-[#F1F5F9] border-b border-white">
         <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           {/* Visual Cards (Order 2 on Mobile, Order 1 on Desktop) */}
           <div className="order-2 lg:order-1">
@@ -475,7 +485,7 @@ function App() {
 
 
       {/* Planos Section */}
-      <section id="planos" className="py-24 px-6 bg-white border-b border-[#F1F5F9]">
+      <section id="planos" className="py-16 md:py-32 px-6 bg-white border-b border-[#F1F5F9]">
         <div className="max-w-7xl mx-auto flex flex-col items-center">
           <div className="relative mb-4 block text-center">
             <h2 className="text-4xl md:text-[3rem] font-headline font-bold text-[#111827] tracking-tight text-center">Conheça nossos planos</h2>
@@ -609,7 +619,7 @@ function App() {
       </section>
 
       {/* FAQ Section */}
-      <section id="faq" className="py-24 px-6 bg-[#F1F5F9] border-t border-[#e2e8f0]">
+      <section id="faq" className="py-16 md:py-32 px-6 bg-[#F1F5F9] border-t border-[#e2e8f0]">
         <div className="max-w-4xl mx-auto">
           <div className="relative mb-14 block text-center">
              <h2 className="text-4xl md:text-[3rem] font-headline font-bold text-[#111827] tracking-tight text-center uppercase">PERGUNTAS FREQUENTES</h2>
@@ -633,7 +643,7 @@ function App() {
       </section>
 
       {/* Footer Section */}
-      <footer className="bg-[#0B1120] text-white pt-24 pb-12 px-6 border-t border-[#1f2937] relative z-20">
+      <footer className="bg-[#0B1120] text-white pt-16 md:pt-32 pb-12 px-6 border-t border-[#1f2937] relative z-20">
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-12 mb-20">
             {/* Brand Col */}
