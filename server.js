@@ -105,9 +105,9 @@ RESPOSTA OBRIGATÓRIA EM JSON:
       if (s !== -1 && e !== -1) {
         aiResponse = JSON.parse(rawContent.substring(s, e + 1));
       } else {
-        // Fallback: Se não tem chaves, assume que a IA mandou texto puro por erro
         aiResponse.reply = rawContent.trim();
       }
+      console.log(`[${remoteJid}] 🤖 IA Response:`, JSON.stringify(aiResponse, null, 2));
     } catch(e) { 
       console.error("Erro Parse JSON AI, usando rawContent como fallback");
       aiResponse.reply = rawContent.trim() || "Tive um soluço técnico. Pode repetir?";
