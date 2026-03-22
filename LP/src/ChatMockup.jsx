@@ -87,20 +87,20 @@ function ChatMessage({ message }) {
   const time = "14:32"; 
 
   return (
-    <div className={`flex w-full chat-msg-enter ${isBot ? 'justify-start' : 'justify-end'}`}>
-      <div className={`relative w-fit px-3 pt-1.5 pb-6 text-[0.9rem] leading-[1.3] text-[#e9edef] rounded-lg shadow-sm max-w-[90%] min-w-[80px] ${
+    <div className={`flex w-full chat-msg-enter ${isBot ? 'justify-start' : 'justify-end'} mb-1`}>
+      <div className={`relative w-fit px-3.5 pt-2 pb-6 text-[0.95rem] leading-[1.3] text-[#e9edef] rounded-lg shadow-sm max-w-[92%] min-w-[90px] ${
         isBot ? 'bg-[#202c33] rounded-tl-sm ml-1' : 'bg-[#005c4b] rounded-tr-sm mr-1'
       }`}>
         <span className="break-normal whitespace-pre-line text-left block">
           {isBot && message.icon && (
-            <span className="material-symbols-outlined text-[#A78BFA] align-middle mr-1.5 mb-0.5" style={{fontSize: '17px', fontVariationSettings: "'FILL' 1"}}>{message.icon}</span>
+            <span className="material-symbols-outlined text-[#A78BFA] align-middle mr-1.5 mb-1" style={{fontSize: '18px', fontVariationSettings: "'FILL' 1"}}>{message.icon}</span>
           )}
           {message.text}
         </span>
-        <div className="absolute bottom-1.5 right-2 flex items-center gap-[3px] select-none">
+        <div className="absolute bottom-1.5 right-2 .5 flex items-center gap-[4px] select-none">
           <span className="text-[10px] text-white/50 font-medium leading-none tracking-wide mt-px">{time}</span>
           {!isBot && (
-            <span className="material-symbols-outlined text-[#53bdeb] leading-none" style={{fontSize: '14px', marginBottom: '-2px'}}>done_all</span>
+            <span className="material-symbols-outlined text-[#53bdeb] leading-none" style={{fontSize: '15px', marginBottom: '-2.5px'}}>done_all</span>
           )}
         </div>
       </div>

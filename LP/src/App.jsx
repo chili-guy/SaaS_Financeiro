@@ -186,8 +186,8 @@ function App() {
           </div>
           
           {/* Center Phone (Uniform Size) */}
-          <div className="w-[85%] sm:w-[320px] z-20 transition-all duration-500 hover:-translate-y-2 rounded-[3.2rem] shadow-[0_40px_80px_rgba(0,0,0,0.4)]">
-              <div className="rounded-[3.2rem] bg-[#111] border-[8px] md:border-[10px] border-[#222] overflow-hidden aspect-[9/19] relative">
+          <div className="w-[92%] sm:w-[320px] z-20 transition-all duration-500 hover:-translate-y-2 rounded-[3.2rem] shadow-[0_40px_80px_rgba(0,0,0,0.4)]">
+              <div className="rounded-[3.2rem] bg-[#111] border-[6px] md:border-[10px] border-[#222] overflow-hidden aspect-[9/19] relative">
                 <ChatMockup />
                 {/* Visual Glow */}
                 <div className="absolute -inset-20 bg-[#7C3AED]/15 blur-[100px] pointer-events-none -z-10 rounded-full"></div>
