@@ -18,8 +18,8 @@ const DEEPSEEK_API_KEY     = process.env.DEEPSEEK_API_KEY || "SUA_CHAVE_AQUI";
 const STRIPE_KEY           = process.env.STRIPE_SECRET_KEY || "sk_test_...";
 const stripe               = new Stripe(STRIPE_KEY);
 
-const STRIPE_PRICE_ID      = process.env.STRIPE_PRICE_ID || "price_1TDsk4JowXrLgN84Z2LNWtXI";
-const APP_URL              = process.env.APP_URL || "https://assessornico.vercel.app";
+const STRIPE_PRICE_ID      = process.env.STRIPE_PRICE_ID || "price_...";
+const APP_URL              = process.env.APP_URL || "http://localhost:3000";
 
 // --- Buffer de Mensagens (QA: Debounce para evitar múltiplas notificações) ---
 const messageBuffers = new Map();
@@ -271,12 +271,32 @@ const server = http.createServer(async (req, res) => {
     req.on("end", async () => {
       try {
         const ev = JSON.parse(body);
+        console.log(`[STRIPE Webhook] Evento: ${ev.type}`);
+
         if (ev.type === 'checkout.session.completed') {
           const phone = ev.data.object.client_reference_id;
-          if (phone) await prisma.user.update({ where: { phone_number: phone }, data: { status: 'ACTIVE' } });
+          if (phone) {
+            console.log(`[STRIPE Webhook] 💰 Pagamento confirmado para o número: ${phone}`);
+            await prisma.user.update({ where: { phone_number: phone }, data: { status: 'ACTIVE' } });
+            
+            // Notificar usuário via WhatsApp
+            const instance = process.env.INSTANCE || "main";
+            const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${instance}`;
+            await fetch(endpoint, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
+              body: JSON.stringify({ 
+                number: phone, 
+                text: "Opa! Recebi a confirmação do seu pagamento. ✅ \n\nSeu acesso ao *Assessor Nico* agora é ILIMITADO! 🎉 \n\nJá pode começar a organizar suas finanças e tarefas sem restrições. Como posso ser útil agora? 📈🚀" 
+              })
+            }).catch(e => console.error("Erro ao enviar confirmação WhatsApp:", e.message));
+          }
         }
         res.writeHead(200); res.end();
-      } catch(e) { res.writeHead(400); res.end(); }
+      } catch(e) { 
+        console.error("Erro Processamento Webhook Stripe:", e.message);
+        res.writeHead(400); res.end(); 
+      }
     });
     return;
   }
