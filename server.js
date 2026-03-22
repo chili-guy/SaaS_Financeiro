@@ -345,8 +345,16 @@ INSTRUÇÃO DE CONTEXTO:
         if (hasChange) {
           const itemTitle = lastActionableData.title || lastActionableData.description || lastActionableData.searchTerm || "";
           bodyPayload.buttons = [
-            { "type": "reply", "displayText": "✏️ Editar", "id": `Editar ${itemTitle}` },
-            { "type": "reply", "displayText": "🗑️ Excluir", "id": `Excluir ${itemTitle}` }
+            { 
+              "buttonId": `Editar ${itemTitle}`, 
+              "buttonText": { "displayText": "✏️ Editar" }, 
+              "type": 1 
+            },
+            { 
+              "buttonId": `Excluir ${itemTitle}`, 
+              "buttonText": { "displayText": "🗑️ Excluir" }, 
+              "type": 1 
+            }
           ];
           bodyPayload.footer = "Assessor Nico • FIn";
         }
