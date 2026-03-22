@@ -337,8 +337,8 @@ INSTRUÇÃO DE CONTEXTO:
         if (hasChange) {
           const itemTitle = lastActionableData.title || lastActionableData.description || lastActionableData.searchTerm || "";
           bodyPayload.buttons = [
-            { "displayText": "✏️ Editar", "id": `Editar ${itemTitle}` },
-            { "displayText": "🗑️ Excluir", "id": `Excluir ${itemTitle}` }
+            { "type": "reply", "displayText": "✏️ Editar", "id": `Editar ${itemTitle}` },
+            { "type": "reply", "displayText": "🗑️ Excluir", "id": `Excluir ${itemTitle}` }
           ];
           bodyPayload.footer = "Assessor Nico • FIn";
         }
