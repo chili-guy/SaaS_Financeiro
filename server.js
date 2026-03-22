@@ -208,13 +208,19 @@ INSTRUÇÃO DE CONTEXTO:
         rawContent = rawContent.replace(/```json/g, "").replace(/```/g, "").trim();
 
 
-        let aiResponse;
+        let aiResponse = null;
         try {
-           const jsonPart = rawContent.match(/\{[\s\S]*\}/)?.[0] || rawContent;
-           aiResponse = JSON.parse(jsonPart);
+          // Robustez QA: Extrai o primeiro '{' até o último '}' para ignorar lixo textual ou Markdown
+          const startIdx = rawContent.indexOf('{');
+          const endIdx = rawContent.lastIndexOf('}');
+          if (startIdx !== -1 && endIdx !== -1) {
+            aiResponse = JSON.parse(rawContent.substring(startIdx, endIdx + 1));
+          } else {
+            throw new Error("JSON no formato esperado não encontrado.");
+          }
         } catch(e) {
-           console.error("Falha ao ler JSON da IA:", rawContent);
-           aiResponse = { action: "CHAT", parsedData: {}, reply: "Entendi, mas meus circuitos falharam na organização disso. Pode falar novamente?" };
+          console.error("❌ Falha no Parser de IA:", e.message, rawContent);
+          aiResponse = { actions: [], reply: "Tive um soluço técnico aqui. Pode repetir o que queria fazer?" };
         }
 
         // Executa a Mágica Bancária de acordo com o Cérebro da IA
@@ -229,13 +235,18 @@ INSTRUÇÃO DE CONTEXTO:
           if (!action) continue;
 
           try {
-            if (action === "EXPENSE" && parsedData.amount && parsedData.description) {
-              console.log(`[${remoteJid}] Salvando Gasto: R$${parsedData.amount}`);
-              await prisma.expense.create({
-                data: { user_id: user.id, amount: Number(parsedData.amount), description: parsedData.description }
-              });
-              hasChange = true;
-              lastActionableData = parsedData;
+            if (action === "EXPENSE") {
+              // Validação de Valor: Remove vírgulas, espaços e garante que é um número positivo
+              const rawAmount = String(parsedData.amount || "0").replace(',', '.').replace(/[^\d.]/g, '');
+              const valor = parseFloat(rawAmount);
+              
+              if (!isNaN(valor) && valor > 0 && parsedData.description) {
+                await prisma.expense.create({
+                  data: { user_id: user.id, amount: valor, description: parsedData.description }
+                });
+                hasChange = true;
+                lastActionableData = parsedData;
+              }
             } else if (action === "TASK" && parsedData.title) {
               console.log(`[${remoteJid}] Analisando Tarefa: ${parsedData.title}`);
               
@@ -332,6 +343,10 @@ INSTRUÇÃO DE CONTEXTO:
           bodyPayload.footer = "Assessor Nico • FIn";
         }
 
+        // --- Envio para Evolution com Timeout de Segurança (QA Approved) ---
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s de limite
+
         try {
           const sendRes = await fetch(endpoint, {
             method: "POST",
@@ -339,13 +354,21 @@ INSTRUÇÃO DE CONTEXTO:
               "Content-Type": "application/json",
               "apikey": EVO_KEY
             },
-            body: JSON.stringify(bodyPayload)
+            body: JSON.stringify(bodyPayload),
+            signal: controller.signal
           });
+          clearTimeout(timeoutId);
 
-          const sendResult = await sendRes.json();
-          console.log(`[${remoteJid}] Resposta da Evolution API:`, JSON.stringify(sendResult));
+          if (!sendRes.ok) {
+            const errData = await sendRes.json().catch(() => ({}));
+            console.log(`[${remoteJid}] Erro Evolution API (${sendRes.status}):`, JSON.stringify(errData));
+          }
         } catch (sendErr) {
-          console.error(`[${remoteJid}] Erro ao ENVIAR mensagem via Evolution:`, sendErr);
+          if (sendErr.name === 'AbortError') {
+            console.error(`[${remoteJid}] Timeout ao enviar para Evolution.`);
+          } else {
+            console.error(`[${remoteJid}] Falha de rede/Evolution:`, sendErr.message);
+          }
         }
 
         return end200();
