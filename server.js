@@ -162,20 +162,16 @@ REGRAS DE OURO:
 
 RESPOSTA OBRIGATÓRIA EM JSON:
 {
-  "action": "(TASK | EXPENSE | NOTE | CHAT | QUERY | DONE | DELETE | CLEANUP)",
-  "parsedData": {
-     "title": "...", "due_date": "ISO8601", 
-     "amount": 0.0, "description": "...", 
-     "text": "...",
-     "searchTerm": "...",
-     "taskId": "..." 
-  },
-  "reply": "Sua resposta amigável e rica em contexto aqui."
+  "actions": [ 
+    { "action": "TASK|EXPENSE|NOTE|DONE|DELETE|CLEANUP", "parsedData": { ... } }
+  ],
+  "reply": "Sua resposta amigável aqui."
 }
+*Nota: Você pode enviar múltiplas ações no array se o usuário pedir várias coisas (ex: recorrência). Se for apenas uma coisa, mande apenas um objeto no array.*
 
 INSTRUÇÃO DE CONTEXTO:
-- Se a resposta para a pergunta (ex: lista recente, total rápido de 20 itens ou um lembrete específico) já estiver nos DADOS DO USUÁRIO acima, use a ação CHAT e responda diretamente.
-- Use QUERY apenas se precisar buscar um item específico que NÃO está na lista acima ou se o usuário pedir o "Total Geral" de todo o histórico.`;
+- Se a resposta para a pergunta já estiver nos DADOS DO USUÁRIO acima, use o array de ações vazio e responda no 'reply'.
+- Use QUERY apenas se precisar buscar um item específico que NÃO está na lista acima.`;
 
         // Chama a Inteligência Artificial
         const upstream = await fetch("https://api.deepseek.com/v1/chat/completions", {
@@ -222,175 +218,100 @@ INSTRUÇÃO DE CONTEXTO:
         }
 
         // Executa a Mágica Bancária de acordo com o Cérebro da IA
-        const { action, parsedData } = aiResponse;
-        console.log(`[${remoteJid}] Ação Identificada: ${action}`);
-        
-        try {
-          if (action === "EXPENSE" && parsedData.amount && parsedData.description) {
-            console.log(`[${remoteJid}] Salvando Gasto: R$${parsedData.amount}`);
-            await prisma.expense.create({
-              data: { user_id: user.id, amount: Number(parsedData.amount), description: parsedData.description }
-            });
-          } else if (action === "TASK" && parsedData.title) {
-            console.log(`[${remoteJid}] Analisando Tarefa: ${parsedData.title}`);
-            
-            // Verifica se já existe uma tarefa identica ou muito parecida não concluída
-            const existingTask = await prisma.task.findFirst({
-              where: {
-                user_id: user.id,
-                completed: false,
-                title: { contains: parsedData.title, mode: 'insensitive' }
-              }
-            });
+        const actions = aiResponse.actions || (aiResponse.action ? [aiResponse] : []);
+        console.log(`[${remoteJid}] Processando ${actions.length} ações.`);
 
-            if (existingTask) {
-              console.log(`[${remoteJid}] Atualizando tarefa existente: ${existingTask.id}`);
-              await prisma.task.update({
-                where: { id: existingTask.id },
-                data: { 
-                  due_date: parsedData.due_date ? new Date(parsedData.due_date) : existingTask.due_date 
-                }
+        let hasChange = false;
+        let lastActionableData = {};
+
+        for (const act of actions) {
+          const { action, parsedData } = act;
+          if (!action) continue;
+
+          try {
+            if (action === "EXPENSE" && parsedData.amount && parsedData.description) {
+              console.log(`[${remoteJid}] Salvando Gasto: R$${parsedData.amount}`);
+              await prisma.expense.create({
+                data: { user_id: user.id, amount: Number(parsedData.amount), description: parsedData.description }
               });
-              aiResponse.reply = `✅ *Tarefa Atualizada!* \n\nJá ajustei o horário de "${existingTask.title}". Tudo pronto! 🔔`;
-            } else {
-              await prisma.task.create({
-                data: { 
-                  user_id: user.id, 
-                  title: parsedData.title, 
-                  due_date: parsedData.due_date ? new Date(parsedData.due_date) : null 
-                }
-              });
-            }
-          } else if (action === "NOTE" && parsedData.text) {
-            console.log(`[${remoteJid}] Criando Nota`);
-            await prisma.note.create({
-              data: { user_id: user.id, content: parsedData.text }
-            });
-          } else if (action === "QUERY") {
-            const searchTerm = (parsedData.searchTerm || parsedData.description || "").trim().toLowerCase();
-            const isTotal = searchTerm.includes("total") || searchTerm.includes("soma") || searchTerm.includes("quanto");
-            
-            if (isTotal) {
-              const expenses = await prisma.expense.findMany({ where: { user_id: user.id } });
-              const total = expenses.reduce((s, e) => s + e.amount, 0);
-              const tasks = await prisma.task.count({ where: { user_id: user.id, completed: false } });
-              aiResponse.reply = `📊 *Resumo Geral:* \n\n*Total de Gastos:* R$ ${total.toFixed(2)}\n*Tarefas Pendentes:* ${tasks}\n\nAlgo mais que eu possa ajudar?`;
-            } else {
-              const isTaskSearch = searchTerm.includes("tarefa") || searchTerm.includes("lembrete") || searchTerm.includes("pendente") || searchTerm.includes("resumo");
+              hasChange = true;
+              lastActionableData = parsedData;
+            } else if (action === "TASK" && parsedData.title) {
+              console.log(`[${remoteJid}] Analisando Tarefa: ${parsedData.title}`);
               
-              if (isTaskSearch) {
-                 const tasks = await prisma.task.findMany({
-                   where: { user_id: user.id, completed: false, title: { contains: searchTerm.replace(/tarefa|lembrete|pendente|resumo/g, "").trim(), mode: 'insensitive' } },
-                   orderBy: { due_date: 'asc' }, take: 20
-                 });
-                 if (tasks.length > 0) {
-                    aiResponse.reply = `✅ *Tarefas encontradas:*\n\n` + tasks.map(t => `• *${t.title}* ${t.due_date ? `(_${new Date(t.due_date).toLocaleString('pt-BR')}_)` : "(_Sem data_)"}`).join("\n");
-                 } else {
-                    aiResponse.reply = `Não encontrei nenhuma tarefa correspondente a "${searchTerm}". 🧐`;
-                 }
-              } else {
-                 const expenses = await prisma.expense.findMany({
-                   where: { user_id: user.id, description: { contains: searchTerm, mode: 'insensitive' } },
-                   orderBy: { date: 'desc' }, take: 15
-                 });
-                 if (expenses.length > 0) {
-                    aiResponse.reply = `✅ *Gastos encontrados:*\n\n` + expenses.map(e => `• *R$${e.amount.toFixed(2)}* - ${e.description} (_${e.date.toLocaleDateString('pt-BR')}_)`).join("\n");
-                 } else {
-                    // Fallback: busca na tabela de tarefas se não achou gastos
-                    const fallbackTasks = await prisma.task.findMany({
-                      where: { user_id: user.id, completed: false, title: { contains: searchTerm, mode: 'insensitive' } },
-                      take: 5
-                    });
-                    if (fallbackTasks.length > 0) {
-                      aiResponse.reply = `Não achei gastos, mas encontrei estas tarefas: \n` + fallbackTasks.map(t => `• *${t.title}* ${t.due_date ? `(_${new Date(t.due_date).toLocaleString('pt-BR')}_)` : ""}`).join("\n");
-                    } else {
-                      aiResponse.reply = `Não encontrei nenhum registro de gasto ou tarefa para "${searchTerm}". 🧐`;
-                    }
-                 }
-              }
-            }
-          } else if (action === "DONE") {
-            const search = parsedData.taskId || parsedData.title || "";
-            console.log(`[${remoteJid}] Concluindo tarefa: ${search}`);
-            
-            // Busca a tarefa mais recente com esse nome se não houver ID
-            const task = await prisma.task.findFirst({
-              where: { 
-                user_id: user.id, 
-                completed: false,
-                title: { contains: search, mode: 'insensitive' }
-              },
-              orderBy: { created_at: 'desc' }
-            });
-
-            if (task) {
-              await prisma.task.update({
-                where: { id: task.id },
-                data: { completed: true }
+              const existingTask = await prisma.task.findFirst({
+                where: { user_id: user.id, completed: false, title: { contains: parsedData.title, mode: 'insensitive' } }
               });
-              aiResponse.reply = `✅ *Tarefa Concluída!* \n\nMarquei "${task.title}" como feita. Mandou bem! 🚀`;
-            } else {
-              // Tenta concluir TODAS se o usuário pediu especificamente (opcional, baseado no contexto)
-              if (search.toLowerCase().includes("todas") || search.toLowerCase().includes("tudo")) {
-                await prisma.task.updateMany({
-                  where: { user_id: user.id, completed: false },
-                  data: { completed: true }
+
+              if (existingTask) {
+                await prisma.task.update({
+                  where: { id: existingTask.id },
+                  data: { due_date: parsedData.due_date ? new Date(parsedData.due_date) : existingTask.due_date }
                 });
-                aiResponse.reply = `✅ *Tudo limpo!* Concluí todas as suas tarefas pendentes de uma vez. 🎉`;
               } else {
-                aiResponse.reply = `Não encontrei nenhuma tarefa pendente com o nome "${search}" para concluir. 🧐`;
+                await prisma.task.create({
+                  data: { user_id: user.id, title: parsedData.title, due_date: parsedData.due_date ? new Date(parsedData.due_date) : null }
+                });
               }
-            }
-          } else if (action === "DELETE") {
-            const search = parsedData.title || parsedData.searchTerm || "";
-            console.log(`[${remoteJid}] Deletando: ${search}`);
-
-            // Tenta deletar tanto de tarefas quanto de gastos para ser flexível
-            const deletedTasks = await prisma.task.deleteMany({
-              where: {
-                user_id: user.id,
-                title: { contains: search, mode: 'insensitive' }
-              }
-            });
-
-            const deletedExpenses = await prisma.expense.deleteMany({
-              where: {
-                user_id: user.id,
-                description: { contains: search, mode: 'insensitive' }
-              }
-            });
-
-            if (deletedTasks.count > 0 || deletedExpenses.count > 0) {
-              aiResponse.reply = `🗑️ *Removido com sucesso!* \n\nLimpei ${deletedTasks.count} tarefas e ${deletedExpenses.count} gastos relacionados a "${search}".`;
-            } else {
-              aiResponse.reply = `Não encontrei nada para remover com o nome "${search}".`;
-            }
-          } else if (action === "CLEANUP") {
-            console.log(`[${remoteJid}] Executando limpeza de duplicatas`);
-            
-            // Pega todas as tarefas não concluídas
-            const tasks = await prisma.task.findMany({
-              where: { user_id: user.id, completed: false },
-              orderBy: { created_at: 'desc' }
-            });
-
-            const seenTitles = new Set();
-            let removedCount = 0;
-
-            for (const t of tasks) {
-              const normalizedTitle = t.title.toLowerCase().trim();
-              if (seenTitles.has(normalizedTitle)) {
-                await prisma.task.delete({ where: { id: t.id } });
-                removedCount++;
+              hasChange = true;
+              lastActionableData = parsedData;
+            } else if (action === "NOTE" && parsedData.text) {
+              await prisma.note.create({ data: { user_id: user.id, content: parsedData.text } });
+            } else if (action === "QUERY") {
+              const searchTerm = (parsedData.searchTerm || parsedData.description || "").trim().toLowerCase();
+              const isTotal = searchTerm.includes("total") || searchTerm.includes("soma") || searchTerm.includes("quanto");
+              
+              if (isTotal) {
+                const expenses = await prisma.expense.findMany({ where: { user_id: user.id } });
+                const total = expenses.reduce((s, e) => s + e.amount, 0);
+                const tasks = await prisma.task.count({ where: { user_id: user.id, completed: false } });
+                aiResponse.reply = `📊 *Resumo Geral:* \n\n*Total de Gastos:* R$ ${total.toFixed(2)}\n*Tarefas Pendentes:* ${tasks}\n\nAlgo mais?`;
               } else {
-                seenTitles.add(normalizedTitle);
+                const isTaskSearch = searchTerm.includes("tarefa") || searchTerm.includes("lembrete") || searchTerm.includes("pendente") || searchTerm.includes("resumo");
+                if (isTaskSearch) {
+                   const tasks = await prisma.task.findMany({
+                     where: { user_id: user.id, completed: false, title: { contains: searchTerm.replace(/tarefa|lembrete|pendente|resumo/g, "").trim(), mode: 'insensitive' } },
+                     orderBy: { due_date: 'asc' }, take: 20
+                   });
+                   if (tasks.length > 0) aiResponse.reply = `✅ *Tarefas:*\n` + tasks.map(t => `• *${t.title}* ${t.due_date ? `(_${new Date(t.due_date).toLocaleString('pt-BR')}_)` : ""}`).join("\n");
+                } else {
+                   const expenses = await prisma.expense.findMany({
+                     where: { user_id: user.id, description: { contains: searchTerm, mode: 'insensitive' } },
+                     orderBy: { date: 'desc' }, take: 15
+                   });
+                   if (expenses.length > 0) aiResponse.reply = `✅ *Gastos:*\n` + expenses.map(e => `• *R$${e.amount.toFixed(2)}* - ${e.description}`).join("\n");
+                }
               }
+              hasChange = true;
+              lastActionableData = parsedData;
+            } else if (action === "DONE") {
+              const search = parsedData.taskId || parsedData.title || "";
+              const task = await prisma.task.findFirst({
+                where: { user_id: user.id, completed: false, title: { contains: search, mode: 'insensitive' } },
+                orderBy: { created_at: 'desc' }
+              });
+              if (task) {
+                await prisma.task.update({ where: { id: task.id }, data: { completed: true } });
+                aiResponse.reply = `✅ *Tarefa Concluída: ${task.title}*`;
+              }
+              hasChange = true;
+            } else if (action === "CLEANUP") {
+              const tasks = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, orderBy: { created_at: 'desc' } });
+              const seenTitles = new Set();
+              let removedCount = 0;
+              for (const t of tasks) {
+                const nt = t.title.toLowerCase().trim();
+                if (seenTitles.has(nt)) { await prisma.task.delete({ where: { id: t.id } }); removedCount++; } else { seenTitles.add(nt); }
+              }
+              aiResponse.reply = `✨ *Limpeza concluída!* Removidos ${removedCount} itens.`;
+            } else if (action === "DELETE") {
+              const search = parsedData.title || parsedData.searchTerm || "";
+              const dt = await prisma.task.deleteMany({ where: { user_id: user.id, title: { contains: search, mode: 'insensitive' } } });
+              const de = await prisma.expense.deleteMany({ where: { user_id: user.id, description: { contains: search, mode: 'insensitive' } } });
+              aiResponse.reply = `🗑️ *Removido:* ${dt.count + de.count} itens de "${search}".`;
+              hasChange = true;
             }
-
-            aiResponse.reply = `✨ *Lista Limpa!* \n\nRemovi ${removedCount} tarefas duplicadas. Agora sua lista tem apenas itens únicos e organizados! 🚀`;
-          }
-        } catch(dbErr) {
-          console.error(`[${remoteJid}] Erro ao salvar no DB:`, dbErr);
+          } catch(dbErr) { console.error(`[${remoteJid}] Erro no DB:`, dbErr); }
         }
 
         // Salvo o histórico pra ele lembrar o que falou
@@ -399,23 +320,15 @@ INSTRUÇÃO DE CONTEXTO:
         }
 
         // Dispara de Volta pelo Cânion da Evolution!
-        const isActionable = ["EXPENSE", "TASK", "QUERY", "DONE"].includes(action);
-        let endpoint = `${EVO_URL.replace(/\/$/, "")}/message/${isActionable ? 'sendButtons' : 'sendText'}/${payload.instance}`;
-        
-        console.log(`[${remoteJid}] Enviando resposta (${isActionable ? 'Buttons' : 'Text'}) para: ${endpoint}`);
-        
-        let bodyPayload = {
-          number: remoteJid,
-          text: aiResponse.reply || "Ação executada com sucesso! 🚀"
-        };
+        let endpoint = `${EVO_URL.replace(/\/$/, "")}/message/${hasChange ? 'sendButtons' : 'sendText'}/${payload.instance}`;
+        let bodyPayload = { number: remoteJid, text: aiResponse.reply || "Feito! ✅" };
 
-        if (isActionable) {
-          const itemTitle = parsedData.title || parsedData.description || parsedData.searchTerm || "";
+        if (hasChange) {
+          const itemTitle = lastActionableData.title || lastActionableData.description || lastActionableData.searchTerm || "";
           bodyPayload.buttons = [
             { "displayText": "✏️ Editar", "id": `Editar ${itemTitle}` },
             { "displayText": "🗑️ Excluir", "id": `Excluir ${itemTitle}` }
           ];
-          // Algumas versões da Evolution pedem footer
           bodyPayload.footer = "Assessor Nico • FIn";
         }
 
