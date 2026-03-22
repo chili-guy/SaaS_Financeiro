@@ -1,21 +1,5 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import 'dotenv/config';
 import { PrismaClient } from "@prisma/client";
-
-// --- Forçar carregamento manual do .env pois o dotenv está falhando no script isolado ---
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const envPath   = path.join(__dirname, '../.env');
-
-if (fs.existsSync(envPath)) {
-  const envContent = fs.readFileSync(envPath, 'utf8');
-  envContent.split('\n').forEach(line => {
-    const [key, value] = line.split('=');
-    if (key && value) {
-      process.env[key.trim()] = value.trim().replace(/^["']|["']$/g, '');
-    }
-  });
-}
 
 const prisma = new PrismaClient();
 
@@ -25,7 +9,7 @@ async function main() {
   try {
     // Ordem importa por causa das chaves estrangeiras
     await prisma.message.deleteMany({});
-    console.log("✅ Mensagens removidas.");
+    console.log("✅ Mensagens (Histórico) removidas.");
     
     await prisma.task.deleteMany({});
     console.log("✅ Tarefas removidas.");
