@@ -345,7 +345,7 @@ function App() {
       </section>
 
       {/* Block 3: Registre tudo no WhatsApp - Redesigned for Premium Look */}
-      <section className="py-16 md:py-32 px-6 bg-[#F8FAFC] relative overflow-hidden border-b border-[#F1F5F9]" id="tecnologia">
+      <section className="py-16 md:py-32 px-6 bg-[#F8FAFC] relative overflow-hidden border-b border-[#F1F5F9] min-h-[700px] flex items-center" id="tecnologia">
         {/* IBM-style Grid Background */}
         <div className="absolute inset-0 opacity-[0.4] pointer-events-none" 
              style={{ 
