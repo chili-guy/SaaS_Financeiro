@@ -272,6 +272,12 @@ const server = http.createServer(async (req, res) => {
 
   const cleanUrl = req.url.split('?')[0].replace(/\/$/, '');
 
+  // Health Check para o Easypanel não matar o container
+  if (req.method === 'GET' && (cleanUrl === "" || cleanUrl === "/health")) {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    return res.end("Nico is alive! 🚀");
+  }
+
   // Webhook Stripe
   if (req.method === 'POST' && cleanUrl === '/webhook/stripe') {
     let body = "";
