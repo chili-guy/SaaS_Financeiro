@@ -156,11 +156,13 @@ REGRAS DE OURO:
 6. PERSISTÊNCIA: Nunca diga que "nada fica salvo". Use a ação "CHAT" para responder usando os dados acima.
 7. Se o usuário for vago ao pedir um gasto ou tarefa, diga que já salvou e peça confirmação.
 8. PROATIVIDADE EM LEMBRETES: Sempre que o usuário criar uma tarefa sem horário, pergunte: "Que horas quer que eu te lembre?".
-9. COMANDOS VS TAREFAS: NUNCA crie uma TASK com títulos como "Concluir tarefas", "Limpar tudo" ou "Deletar gasto". Se o usuário disser algo assim, use as ações DONE ou DELETE. É PROIBIDO criar tarefas que soem como ordens de sistema.
+9. COMANDOS VS TAREFAS: NUNCA crie uma TASK com títulos como "Concluir tarefas", "Limpar tudo" ou "Deletar". Se o usuário disser algo assim, use as ações DONE, DELETE ou CLEANUP.
+10. TÍTULOS GENÉRICOS: Nunca crie uma tarefa chamada apenas "Tarefa" ou "Lembrete". Peça mais detalhes se necessário.
+11. LIMPEZA: Se houver duplicatas ou o usuário pedir para organizar/limpar a lista, use obrigatoriamente a ação CLEANUP.
 
 RESPOSTA OBRIGATÓRIA EM JSON:
 {
-  "action": "(TASK | EXPENSE | NOTE | CHAT | QUERY | DONE | DELETE)",
+  "action": "(TASK | EXPENSE | NOTE | CHAT | QUERY | DONE | DELETE | CLEANUP)",
   "parsedData": {
      "title": "...", "due_date": "ISO8601", 
      "amount": 0.0, "description": "...", 
@@ -363,6 +365,29 @@ INSTRUÇÃO DE CONTEXTO:
             } else {
               aiResponse.reply = `Não encontrei nada para remover com o nome "${search}".`;
             }
+          } else if (action === "CLEANUP") {
+            console.log(`[${remoteJid}] Executando limpeza de duplicatas`);
+            
+            // Pega todas as tarefas não concluídas
+            const tasks = await prisma.task.findMany({
+              where: { user_id: user.id, completed: false },
+              orderBy: { created_at: 'desc' }
+            });
+
+            const seenTitles = new Set();
+            let removedCount = 0;
+
+            for (const t of tasks) {
+              const normalizedTitle = t.title.toLowerCase().trim();
+              if (seenTitles.has(normalizedTitle)) {
+                await prisma.task.delete({ where: { id: t.id } });
+                removedCount++;
+              } else {
+                seenTitles.add(normalizedTitle);
+              }
+            }
+
+            aiResponse.reply = `✨ *Lista Limpa!* \n\nRemovi ${removedCount} tarefas duplicadas. Agora sua lista tem apenas itens únicos e organizados! 🚀`;
           }
         } catch(dbErr) {
           console.error(`[${remoteJid}] Erro ao salvar no DB:`, dbErr);
