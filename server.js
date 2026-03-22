@@ -373,9 +373,26 @@ INSTRUÇÃO DE CONTEXTO:
         }
 
         // Dispara de Volta pelo Cânion da Evolution!
-        const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${payload.instance}`;
-        console.log(`[${remoteJid}] Enviando resposta via Evolution para: ${endpoint}`);
+        const isActionable = ["EXPENSE", "TASK", "QUERY", "DONE"].includes(action);
+        let endpoint = `${EVO_URL.replace(/\/$/, "")}/message/${isActionable ? 'sendButtons' : 'sendText'}/${payload.instance}`;
         
+        console.log(`[${remoteJid}] Enviando resposta (${isActionable ? 'Buttons' : 'Text'}) para: ${endpoint}`);
+        
+        let bodyPayload = {
+          number: remoteJid,
+          text: aiResponse.reply || "Ação executada com sucesso! 🚀"
+        };
+
+        if (isActionable) {
+          const itemTitle = parsedData.title || parsedData.description || parsedData.searchTerm || "";
+          bodyPayload.buttons = [
+            { "displayText": "✏️ Editar", "id": `Editar ${itemTitle}` },
+            { "displayText": "🗑️ Excluir", "id": `Excluir ${itemTitle}` }
+          ];
+          // Algumas versões da Evolution pedem footer
+          bodyPayload.footer = "Assessor Nico • FIn";
+        }
+
         try {
           const sendRes = await fetch(endpoint, {
             method: "POST",
@@ -383,10 +400,7 @@ INSTRUÇÃO DE CONTEXTO:
               "Content-Type": "application/json",
               "apikey": EVO_KEY
             },
-            body: JSON.stringify({
-              number: remoteJid,
-              text: aiResponse.reply || "Ação executada com sucesso! 🚀"
-            })
+            body: JSON.stringify(bodyPayload)
           });
 
           const sendResult = await sendRes.json();
