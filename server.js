@@ -18,6 +18,9 @@ const DEEPSEEK_API_KEY     = process.env.DEEPSEEK_API_KEY || "SUA_CHAVE_AQUI";
 const STRIPE_KEY           = process.env.STRIPE_SECRET_KEY || "sk_test_...";
 const stripe               = new Stripe(STRIPE_KEY);
 
+const STRIPE_PRICE_ID      = process.env.STRIPE_PRICE_ID || "price_1TDsk4JowXrLgN84Z2LNWtXI";
+const APP_URL              = process.env.APP_URL || "https://assessornico.vercel.app";
+
 // --- Buffer de Mensagens (QA: Debounce para evitar múltiplas notificações) ---
 const messageBuffers = new Map();
 const DEBOUNCE_TIME = 2500; // Aguarda 2.5s antes de processar
@@ -27,18 +30,33 @@ const DEBOUNCE_TIME = 2500; // Aguarda 2.5s antes de processar
  */
 async function processNicoCore(remoteJid, msgText, instance) {
   try {
-    // 1. Controle de Assinante
+    // 1. Controle de Assinante (Freemium/SaaS Logic)
     let user = await prisma.user.findUnique({ where: { phone_number: remoteJid } });
     if (!user) {
-      user = await prisma.user.create({ data: { phone_number: remoteJid, status: "ACTIVE" } });
+      // QA: Novos usuários começam como INACTIVE para forçar o checkout
+      user = await prisma.user.create({ data: { phone_number: remoteJid, status: "INACTIVE" } });
     }
 
     if (user.status !== "ACTIVE") {
+      console.log(`[${remoteJid}] 💳 Usuário inativo. Gerando Checkout Stripe...`);
+      
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
+        mode: 'subscription',
+        client_reference_id: remoteJid,
+        success_url: `${APP_URL}/success.html`,
+        cancel_url: `${APP_URL}/cancel.html`,
+      });
+
       const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${instance}`;
       await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
-        body: JSON.stringify({ number: remoteJid, text: "Sua assinatura FIn está inativa. Renove para continuar usando! 💳" })
+        body: JSON.stringify({ 
+          number: remoteJid, 
+          text: `Olá! 😊 Eu sou o *Assessor Nico*. \n\nPara começarmos nossa jornada de organização e mentorias financeiras, você precisa ativar sua assinatura. \n\nClique no link seguro do Stripe abaixo para ativar: \n\n🔗 ${session.url}` 
+        })
       });
       return;
     }
