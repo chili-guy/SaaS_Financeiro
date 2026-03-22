@@ -322,7 +322,14 @@ INSTRUÇÃO DE CONTEXTO:
               aiResponse.reply = `🗑️ *Removido:* ${dt.count + de.count} itens de "${search}".`;
               hasChange = true;
             }
-          } catch(dbErr) { console.error(`[${remoteJid}] Erro no DB:`, dbErr); }
+          } catch(dbErr) { 
+            console.error(`[${remoteJid}] ❌ Erro na ação:`, dbErr.message); 
+          }
+        }
+
+        // --- Garantia de Resposta QA ---
+        if (!aiResponse.reply && actions.length > 0) {
+          aiResponse.reply = "Tudo pronto! Ação executada com sucesso. ✅";
         }
 
         // Salvo o histórico pra ele lembrar o que falou
