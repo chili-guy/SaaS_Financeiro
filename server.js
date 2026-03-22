@@ -181,6 +181,27 @@ const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
 
+  // ── ROTA DE RESET (Temporária: Limpeza Geral para Testes) ─────────────────────
+  if (req.method === 'GET' && req.url === '/nico-reset-database-delete-all') {
+    try {
+      console.log("🧼 Iniciando limpeza completa via Rota de Servidor...");
+      // Ordem importa por causa das chaves estrangeiras
+      await prisma.message.deleteMany({});
+      await prisma.task.deleteMany({});
+      await prisma.expense.deleteMany({});
+      await prisma.note.deleteMany({});
+      await prisma.user.deleteMany({});
+      
+      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("✅ BANCO DE DADOS 100% ZERADO! O Nico esqueceu tudo. Já pode deletar esta rota do código.");
+    } catch (err) {
+      console.error("❌ Erro no reset de banco:", err.message);
+      res.writeHead(500);
+      res.end("❌ Erro no reset: " + err.message);
+    }
+    return;
+  }
+
   // Webhook Stripe
   if (req.method === 'POST' && req.url === '/webhook/stripe') {
     let body = "";

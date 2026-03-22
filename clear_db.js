@@ -1,6 +1,6 @@
-import 'dotenv/config';
 import { PrismaClient } from "@prisma/client";
 
+// O script agora assume que a DATABASE_URL já foi injetada no ambiente via terminal
 const prisma = new PrismaClient();
 
 async function main() {
@@ -9,7 +9,7 @@ async function main() {
   try {
     // Ordem importa por causa das chaves estrangeiras
     await prisma.message.deleteMany({});
-    console.log("✅ Mensagens (Histórico) removidas.");
+    console.log("✅ Histórico de Mensagens removido.");
     
     await prisma.task.deleteMany({});
     console.log("✅ Tarefas removidas.");
@@ -23,7 +23,7 @@ async function main() {
     await prisma.user.deleteMany({});
     console.log("✅ Usuários removidos.");
 
-    console.log("\n✨ BANCO DE DADOS 100% ZERADO E PRONTO PARA TESTES!");
+    console.log("\n✨ BANCO DE DADOS 100% ZERADO!");
   } catch (err) {
     console.error("❌ Erro ao limpar banco:", err.message);
     process.exit(1);
