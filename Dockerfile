@@ -14,7 +14,7 @@ RUN npm install
 COPY . .
 
 # A porta padrão do nosso arquivo server.js
-EXPOSE 3000
+EXPOSE 8080
 
 # O comando clássico para iniciar a nossa mágica
 CMD ["npm", "start"]
