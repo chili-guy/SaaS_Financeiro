@@ -11,7 +11,7 @@ model User {
   id                 String    @id @default(uuid())
   phone_number       String    @unique
   stripe_customer_id String?   @unique
-  status             String    @default("ACTIVE") // For MVP test phase
+  status             String    @default("TRIAL")
   created_at         DateTime  @default(now())
 
   messages           Message[]
