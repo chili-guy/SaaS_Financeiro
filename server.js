@@ -159,16 +159,21 @@ RESPOSTA OBRIGATÓRIA EM JSON:
           console.log(`[${remoteJid}] ✨ Limpeza de duplicatas: ${removed} removidos.`);
         } else if (action === "DELETE") {
           const s = (parsedData.title || "").toLowerCase();
-          if (s.includes("tudo") || s.includes("todas") || s.includes("toda")) {
+          // Sinônimos de "Limpar Tudo" para evitar deletar itens específicos com esses nomes
+          const isFullCleanup = s.includes("tudo") || s.includes("todas") || s.includes("toda") || 
+                                s.includes("lista") || s.includes("agenda") || s.includes("histórico") ||
+                                s.includes("registros") || s === "tarefas" || s === "gastos";
+
+          if (isFullCleanup) {
             console.log(`[${remoteJid}] 🗑️ LIMPANDO TUDO (Tasks + Expenses)...`);
             const dt = await prisma.task.deleteMany({ where: { user_id: user.id } });
             const de = await prisma.expense.deleteMany({ where: { user_id: user.id } });
-            aiResponse.reply = `🗑️ *TUDO LIMPO!* \n\nLimpei todas as suas ${dt.count} tarefas e registros de gastos.`;
+            aiResponse.reply = `🗑️ *TUDO LIMPO!* \n\nAcabei de remover suas ${dt.count} tarefas e registros de gastos. Estamos prontos para um novo começo! ✨`;
           } else {
+            console.log(`[${remoteJid}] 🗑️ Removendo itens específicos: "${s}"...`);
             const dt = await prisma.task.deleteMany({ where: { user_id: user.id, title: { contains: s, mode: 'insensitive' } } });
             const de = await prisma.expense.deleteMany({ where: { user_id: user.id, description: { contains: s, mode: 'insensitive' } } });
             aiResponse.reply = `🗑️ *Removido:* ${dt.count + de.count} itens contendo "${s}".`;
-            console.log(`[${remoteJid}] 🗑️ Removidos ${dt.count + de.count} itens de "${s}".`);
           }
           hasChange = true;
         }
