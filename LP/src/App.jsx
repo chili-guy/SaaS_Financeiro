@@ -345,7 +345,7 @@ function App() {
       </section>
 
       {/* Block 3: Registre tudo no WhatsApp - Redesigned for Premium Look */}
-      <section className="py-16 md:py-32 px-6 bg-[#F8FAFC] relative overflow-hidden border-b border-[#F1F5F9] min-h-[700px] flex items-center" id="tecnologia">
+      <section className="py-16 md:py-32 px-6 bg-[#F8FAFC] relative overflow-hidden border-b border-[#F1F5F9]" id="tecnologia">
         {/* IBM-style Grid Background */}
         <div className="absolute inset-0 opacity-[0.4] pointer-events-none" 
              style={{ 
@@ -362,8 +362,8 @@ function App() {
         <div className="absolute top-20 right-[15%] w-24 h-24 glass-shape rounded-3xl rotate-12 float-slow opacity-20 hidden lg:block"></div>
         <div className="absolute bottom-40 left-[10%] w-16 h-16 glass-shape rounded-full float-medium opacity-20 hidden lg:block"></div>
 
-        {/* Spline 3D Animation - Robot appearing on mobile too */}
-        <div className="absolute left-1/2 -translate-x-1/2 lg:left-auto lg:right-[-10%] top-1/2 -translate-y-1/2 w-[130%] lg:w-[70%] h-[110%] lg:h-full z-0 pointer-events-auto">
+        {/* Spline 3D Animation - "Free" on the Right Side (Desktop) */}
+        <div className="absolute right-[-10%] top-1/2 -translate-y-1/2 w-[70%] h-full z-0 pointer-events-auto hidden lg:block">
            <spline-viewer url="https://prod.spline.design/Xx9X55DsHvKD5uP9/scene.splinecode"></spline-viewer>
         </div>
 
