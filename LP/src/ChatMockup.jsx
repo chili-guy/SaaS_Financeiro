@@ -173,7 +173,7 @@ export default function ChatMockup({ isStatic = false, staticOffset = 0 }) {
   }, [currentIndex, isStatic]);
 
   return (
-    <div className="relative w-full h-full shrink-0 bg-[#0b141a] rounded-[2.5rem] overflow-hidden flex flex-col font-sans">
+    <div className="relative w-full h-full shrink-0 bg-[#0b141a] rounded-[1.8rem] overflow-hidden flex flex-col font-sans">
         {/* Chat Header */}
         <div className="bg-[#202c33] px-2 py-3 flex items-center gap-2 z-20">
           <div className="flex items-center gap-0 text-[#aebac1]">

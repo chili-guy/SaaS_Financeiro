@@ -189,15 +189,15 @@ function App() {
         <div className="relative w-full max-w-7xl mx-auto h-auto z-10 flex flex-wrap justify-center gap-6 md:gap-12 px-4 items-center mb-12 md:mb-24 overflow-visible">
           
           {/* Left Phone (Uniform Size) */}
-          <div className="w-[300px] sm:w-[320px] z-10 hidden lg:block transition-all duration-500 hover:-translate-y-2 rounded-[3rem] shadow-[0_30px_60px_rgba(0,0,0,0.3)]">
-             <div className="rounded-[3rem] bg-[#111] border-[8px] md:border-[10px] border-[#222] overflow-hidden aspect-[9/19]">
+          <div className="w-[300px] sm:w-[320px] z-10 hidden lg:block transition-all duration-500 hover:-translate-y-2 rounded-[2rem] shadow-[0_30px_60px_rgba(0,0,0,0.3)]">
+             <div className="rounded-[2rem] bg-[#111] border-[8px] md:border-[10px] border-[#222] overflow-hidden aspect-[9/19]">
                 <ChatMockup isStatic={true} staticOffset={0} />
              </div>
           </div>
           
           {/* Center Phone (Uniform Size) */}
-          <div className="w-full sm:w-[320px] z-20 transition-all duration-500 hover:-translate-y-2 rounded-[3.2rem] shadow-[0_40px_80px_rgba(0,0,0,0.4)] scale-[1.10] sm:scale-100">
-              <div className="rounded-[3.2rem] bg-[#111] border-[6px] sm:border-[10px] border-[#222] overflow-hidden aspect-[9/19] relative">
+          <div className="w-full sm:w-[320px] z-20 transition-all duration-500 hover:-translate-y-2 rounded-[2.2rem] shadow-[0_40px_80px_rgba(0,0,0,0.4)] scale-[1.10] sm:scale-100">
+              <div className="rounded-[2.2rem] bg-[#111] border-[6px] sm:border-[10px] border-[#222] overflow-hidden aspect-[9/19] relative">
                 <ChatMockup />
                 {/* Visual Glow */}
                 <div className="absolute -inset-20 bg-[#7C3AED]/15 blur-[100px] pointer-events-none -z-10 rounded-full"></div>
@@ -205,8 +205,8 @@ function App() {
           </div>
           
           {/* Right Phone (Uniform Size) */}
-          <div className="w-[300px] sm:w-[320px] z-10 hidden lg:block transition-all duration-500 hover:-translate-y-2 rounded-[3rem] shadow-[0_30px_60px_rgba(0,0,0,0.3)]">
-             <div className="rounded-[3rem] bg-[#111] border-[8px] md:border-[10px] border-[#222] overflow-hidden aspect-[9/19]">
+          <div className="w-[300px] sm:w-[320px] z-10 hidden lg:block transition-all duration-500 hover:-translate-y-2 rounded-[2rem] shadow-[0_30px_60px_rgba(0,0,0,0.3)]">
+             <div className="rounded-[2rem] bg-[#111] border-[8px] md:border-[10px] border-[#222] overflow-hidden aspect-[9/19]">
                 <ChatMockup isStatic={true} staticOffset={44} />
              </div>
           </div>
