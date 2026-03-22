@@ -135,27 +135,41 @@ RESPOSTA OBRIGATÓRIA EM JSON:
           }
           hasChange = true;
         } else if (action === "QUERY") {
+          console.log(`[${remoteJid}] 🔎 Buscando informações...`);
           const term = (parsedData.searchTerm || "").toLowerCase().trim();
-          const isGeneric = !term || ["lista", "tarefas", "resumo", "tudo"].some(k => term.includes(k));
+          const isGeneric = !term || ["lista", "tarefas", "resumo", "tudo", "gastos"].some(k => term.includes(k));
           if (isGeneric) {
             const list = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, orderBy: { due_date: 'asc' } });
-            aiResponse.reply = list.length > 0 ? `✅ *Suas Tarefas:*\n` + list.map(t => `• *${t.title}*`).join("\n") : "Lista zerada! 🎉";
+            aiResponse.reply = list.length > 0 ? `✅ *Suas Tarefas:*\n` + list.map(t => `• *${t.title}*`).join("\n") : "Sua lista de tarefas está zerada! 🎉";
           }
         } else if (action === "DONE") {
           const task = await prisma.task.findFirst({ where: { user_id: user.id, completed: false, title: { contains: parsedData.title || "", mode: 'insensitive' } } });
-          if (task) await prisma.task.update({ where: { id: task.id }, data: { completed: true } });
-          hasChange = true;
+          if (task) {
+            await prisma.task.update({ where: { id: task.id }, data: { completed: true } });
+            console.log(`[${remoteJid}] ✅ Tarefa concluída: ${task.title}`);
+          }
         } else if (action === "CLEANUP") {
           const tasks = await prisma.task.findMany({ where: { user_id: user.id, completed: false } });
           const seen = new Set();
+          let removed = 0;
           for (const t of tasks) {
             const nt = t.title.toLowerCase().trim();
-            if (seen.has(nt)) { await prisma.task.delete({ where: { id: t.id } }); } else { seen.add(nt); }
+            if (seen.has(nt)) { await prisma.task.delete({ where: { id: t.id } }); removed++; } else { seen.add(nt); }
           }
+          console.log(`[${remoteJid}] ✨ Limpeza de duplicatas: ${removed} removidos.`);
         } else if (action === "DELETE") {
           const s = (parsedData.title || "").toLowerCase();
-          if (s.includes("tudo")) await prisma.task.deleteMany({ where: { user_id: user.id } });
-          else await prisma.task.deleteMany({ where: { user_id: user.id, title: { contains: s, mode: 'insensitive' } } });
+          if (s.includes("tudo") || s.includes("todas") || s.includes("toda")) {
+            console.log(`[${remoteJid}] 🗑️ LIMPANDO TUDO (Tasks + Expenses)...`);
+            const dt = await prisma.task.deleteMany({ where: { user_id: user.id } });
+            const de = await prisma.expense.deleteMany({ where: { user_id: user.id } });
+            aiResponse.reply = `🗑️ *TUDO LIMPO!* \n\nLimpei todas as suas ${dt.count} tarefas e registros de gastos.`;
+          } else {
+            const dt = await prisma.task.deleteMany({ where: { user_id: user.id, title: { contains: s, mode: 'insensitive' } } });
+            const de = await prisma.expense.deleteMany({ where: { user_id: user.id, description: { contains: s, mode: 'insensitive' } } });
+            aiResponse.reply = `🗑️ *Removido:* ${dt.count + de.count} itens contendo "${s}".`;
+            console.log(`[${remoteJid}] 🗑️ Removidos ${dt.count + de.count} itens de "${s}".`);
+          }
           hasChange = true;
         }
       } catch(e) { console.error("Erro DB Action:", e.message); }
