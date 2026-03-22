@@ -201,8 +201,10 @@ RESPOSTA OBRIGATÓRIA EM JSON:
         rawContent = rawContent.replace(/```json/g, "").replace(/```/g, "").trim();
 
 
+        let aiResponse;
         try {
-           aiResponse = JSON.parse(rawContent);
+           const jsonPart = rawContent.match(/\{[\s\S]*\}/)?.[0] || rawContent;
+           aiResponse = JSON.parse(jsonPart);
         } catch(e) {
            console.error("Falha ao ler JSON da IA:", rawContent);
            aiResponse = { action: "CHAT", parsedData: {}, reply: "Entendi, mas meus circuitos falharam na organização disso. Pode falar novamente?" };
