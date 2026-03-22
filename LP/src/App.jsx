@@ -301,10 +301,13 @@ function App() {
         <div className="max-w-7xl mx-auto flex flex-col lg:flex-row-reverse items-center gap-12 lg:gap-20">
           {/* Text Content */}
           <div className="flex-1 space-y-8 lg:max-w-[540px]">
-             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#111827]/5 text-[#111827] text-[0.7rem] font-bold tracking-widest uppercase">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#111827] animate-pulse"></span>
-              Gestão de Tempo
-            </div>
+             <div className="inline-flex items-center gap-2 bg-[#7C3AED]/10 text-[#7C3AED] px-3 py-1 rounded-full text-[0.7rem] font-bold tracking-widest uppercase border border-[#7C3AED]/20">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#7C3AED] opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#7C3AED]"></span>
+                </span>
+                Gestão de Tempo
+              </div>
             <h2 className="text-[2.8rem] md:text-[3.8rem] font-headline font-black leading-[1.05] text-[#111827] tracking-tighter">
               Sua agenda <br /><span className="text-[#7C3AED]">no automático.</span>
             </h2>
