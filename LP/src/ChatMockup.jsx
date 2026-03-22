@@ -178,8 +178,21 @@ export default function ChatMockup({ isStatic = false, staticOffset = 0 }) {
         <div className="bg-[#202c33] px-2 py-3 flex items-center gap-2 z-20">
           <div className="flex items-center gap-0 text-[#aebac1]">
             <span className="material-symbols-outlined" style={{fontSize: '20px'}}>arrow_back</span>
-            <div className="w-9 h-9 rounded-full bg-[#8a4cfc] flex items-center justify-center shrink-0 ml-0.5">
-               <span className="material-symbols-outlined text-white text-[1.1rem] pr-0.5">smart_toy</span>
+            <div className="w-8 h-8 rounded-full bg-[#8a4cfc] flex items-center justify-center shrink-0 ml-0.5 overflow-hidden">
+               <svg viewBox="0 0 100 100" className="w-full h-full p-1.5">
+                 <path 
+                   d="M50,15 C30.67,15 15,30.67 15,50 C15,58.85 18.25,66.95 23.6,73.15 L16.5,88.5 L33.25,82.75 C38.35,84.2 43.8,85 50,85 C69.33,85 85,69.33 85,50 C85,30.67 69.33,15 50,15 Z" 
+                   fill="white"
+                 />
+                 <path 
+                   d="M38 48L47 57L65 39" 
+                   stroke="#8a4cfc" 
+                   strokeWidth="10" 
+                   strokeLinecap="round" 
+                   strokeLinejoin="round" 
+                   fill="none"
+                 />
+               </svg>
             </div>
           </div>
           <div className="flex-1 min-w-0">
