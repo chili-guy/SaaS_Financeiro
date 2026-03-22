@@ -339,9 +339,10 @@ INSTRUÇÃO DE CONTEXTO:
         
         let bodyPayload = { 
           number: remoteJid, 
-          title: "", // Remove o "undefined" do topo das mensagens interativas
+          title: "Assessor Nico", // Título profissional no topo
           text: finalReply,
-          description: finalReply 
+          description: finalReply,
+          viewOnce: false // Garante que a mensagem apareça no WhatsApp Web/Desktop
         };
 
         if (hasChange) {
