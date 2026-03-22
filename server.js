@@ -345,16 +345,8 @@ INSTRUÇÃO DE CONTEXTO:
         if (hasChange) {
           const itemTitle = lastActionableData.title || lastActionableData.description || lastActionableData.searchTerm || "";
           bodyPayload.buttons = [
-            { 
-              "buttonId": `Editar ${itemTitle}`, 
-              "buttonText": { "displayText": "✏️ Editar" }, 
-              "type": 1 
-            },
-            { 
-              "buttonId": `Excluir ${itemTitle}`, 
-              "buttonText": { "displayText": "🗑️ Excluir" }, 
-              "type": 1 
-            }
+            { "type": "reply", "displayText": "✏️ Editar", "id": `Editar ${itemTitle}` },
+            { "type": "reply", "displayText": "🗑️ Excluir", "id": `Excluir ${itemTitle}` }
           ];
           bodyPayload.footer = "Assessor Nico • FIn";
         }
@@ -375,15 +367,13 @@ INSTRUÇÃO DE CONTEXTO:
           });
           clearTimeout(timeoutId);
 
-          if (!sendRes.ok) {
-            const errData = await sendRes.json().catch(() => ({}));
-            console.log(`[${remoteJid}] Erro Evolution API (${sendRes.status}):`, JSON.stringify(errData));
-          }
+          const errData = await sendRes.json().catch(() => ({}));
+          console.log(`[Evolution API] Status: ${sendRes.status} | Resposta:`, JSON.stringify(errData));
         } catch (sendErr) {
           if (sendErr.name === 'AbortError') {
-            console.error(`[${remoteJid}] Timeout ao enviar para Evolution.`);
+            console.error(`[Evolution API] Timeout ao enviar.`);
           } else {
-            console.error(`[${remoteJid}] Falha de rede/Evolution:`, sendErr.message);
+            console.error(`[Evolution API] Erro de Rede:`, sendErr.message);
           }
         }
 
