@@ -40,7 +40,7 @@ async function processNicoCore(remoteJid, msgText, instance) {
     const created = new Date(user.created_at);
     const diffTime = Math.abs(now - created);
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    const daysLeft = 14 - diffDays;
+    const daysLeft = 30 - diffDays;
 
     // Se o trial acabou e não é ACTIVE, bloqueia.
     if (user.status !== "ACTIVE" && daysLeft <= 0) {
@@ -59,7 +59,7 @@ async function processNicoCore(remoteJid, msgText, instance) {
         headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
         body: JSON.stringify({ 
           number: remoteJid, 
-          text: `Seu período de teste de 14 dias chegou ao fim! ⏳ \n\nPara continuar com suas mentorias financeiras e organização de tarefas, ative sua assinatura no link abaixo: \n\n🔗 ${session.url}` 
+          text: `Seu período de teste de 30 dias chegou ao fim! ⏳ \n\nPara continuar com suas mentorias financeiras e organização de tarefas, ative sua assinatura no link abaixo: \n\n🔗 ${session.url}` 
         })
       });
       return;
@@ -95,7 +95,7 @@ DADOS DO USUÁRIO (ESTADO ATUAL DO SISTEMA):
 ${isPaying ? "CRÍTICO: O usuário quer PAGAR agora. Responda brevemente e use a ação PAY!" : ""}
 
 PERSONALIDADE E FLUXO:
-1. SE FOR A PRIMEIRA CONVERSA (isFirst=SIM): Comece com: "Olá! 😊 Eu sou o Assessor Nico, seu mentor financeiro elegante e parceiro de organização. É um prazer conhecê-lo!" e, se o status for PLANO TRIAL, informe que ele tem 14 dias para testar tudo.
+1. SE FOR A PRIMEIRA CONVERSA (isFirst=SIM): Comece com: "Olá! 😊 Eu sou o Assessor Nico, seu mentor financeiro elegante e parceiro de organização. É um prazer conhecê-lo!" e, se o status for PLANO TRIAL, informe que ele tem 30 dias para testar tudo.
 2. SE NÃO FOR A PRIMEIRA: Seja direto, educado e pule a apresentação.
 3. TEMA: Foco em finanças, organização de vida pessoal e produtividade.
 
@@ -233,12 +233,19 @@ RESPOSTA OBRIGATÓRIA EM JSON:
     const finalReply = String(aiResponse.reply || (hasChange ? "Tudo pronto! ✅" : "Entendido! 👍")).trim();
     await prisma.message.create({ data: { user_id: user.id, role: "assistant", content: finalReply } });
 
+    // 6. Enviar em blocos (fatiado por \n\n) para naturalidade
+    const parts = finalReply.split("\n\n").filter(p => p.trim() !== "");
     const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${instance}`;
-    await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
-      body: JSON.stringify({ number: remoteJid, text: finalReply })
-    });
+
+    for (const part of parts) {
+      await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
+        body: JSON.stringify({ number: remoteJid, text: part.trim() })
+      });
+      // Pequena pausa entre as bolhas de mensagem
+      await new Promise(r => setTimeout(r, 1500));
+    }
 
   } catch (err) { console.error("Erro Core:", err); }
 }
