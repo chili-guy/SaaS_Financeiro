@@ -30,7 +30,7 @@ async function processNicoCore(remoteJid, msgText, instance) {
     // 1. Controle de Assinante
     let user = await prisma.user.findUnique({ where: { phone_number: remoteJid } });
     if (!user) {
-      user = await prisma.user.create({ data: { whatsapp: remoteJid, phone_number: remoteJid, status: "ACTIVE" } });
+      user = await prisma.user.create({ data: { phone_number: remoteJid, status: "ACTIVE" } });
     }
 
     if (user.status !== "ACTIVE") {
