@@ -30,16 +30,20 @@ const DEBOUNCE_TIME = 2500; // Aguarda 2.5s antes de processar
  */
 async function processNicoCore(remoteJid, msgText, instance) {
   try {
-    // 1. Controle de Assinante (Freemium/SaaS Logic)
+    // 1. Controle de Assinante (SaaS com Trial de 14 dias)
     let user = await prisma.user.findUnique({ where: { phone_number: remoteJid } });
     if (!user) {
-      // QA: Novos usuários começam como INACTIVE para forçar o checkout
-      user = await prisma.user.create({ data: { phone_number: remoteJid, status: "INACTIVE" } });
+      user = await prisma.user.create({ data: { phone_number: remoteJid, status: "TRIAL" } });
     }
 
-    if (user.status !== "ACTIVE") {
-      console.log(`[${remoteJid}] 💳 Usuário inativo. Gerando Checkout Stripe...`);
-      
+    const now = new Date();
+    const created = new Date(user.created_at);
+    const diffTime = Math.abs(now - created);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const daysLeft = 14 - diffDays;
+
+    // Se o trial acabou e não é ACTIVE, bloqueia.
+    if (user.status !== "ACTIVE" && daysLeft <= 0) {
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ['card'],
         line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
@@ -55,7 +59,7 @@ async function processNicoCore(remoteJid, msgText, instance) {
         headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
         body: JSON.stringify({ 
           number: remoteJid, 
-          text: `Olá! 😊 Eu sou o *Assessor Nico*. \n\nPara começarmos nossa jornada de organização e mentorias financeiras, você precisa ativar sua assinatura. \n\nClique no link seguro do Stripe abaixo para ativar: \n\n🔗 ${session.url}` 
+          text: `Seu período de teste de 14 dias chegou ao fim! ⏳ \n\nPara continuar com suas mentorias financeiras e organização de tarefas, ative sua assinatura no link abaixo: \n\n🔗 ${session.url}` 
         })
       });
       return;
@@ -73,12 +77,13 @@ async function processNicoCore(remoteJid, msgText, instance) {
     const myExpStr   = expenses.length > 0 ? expenses.map(e => `R$${e.amount} (${e.description})`).join(", ") : "Nenhum gasto recente";
     const dataAtual  = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
-    // 3. System Prompt (Assertividade & Blocos)
+    // 3. System Prompt (Agora com Trial awareness e PAY action)
     const sysPrompt = `Seu nome é Assessor Nico, um mentor financeiro inteligente e parceiro de organização.
 Hoje é ${dataAtual}.
 
 DADOS DO USUÁRIO (ESTADO ATUAL DO SISTEMA):
 - Nome: ${user.name && user.name !== "Nico User" ? user.name : "usuário"}
+- Status: ${user.status === "ACTIVE" ? "ASSINANTE ATIVO" : `TESTE GRÁTIS (${daysLeft <= 0 ? "Expirado" : daysLeft + " dias restantes"})`}
 - Tarefas Pendentes: ${myTasksStr}
 - Últimos Gastos: ${myExpStr}
 
@@ -94,10 +99,14 @@ REGRAS DE OURO (QA Elite):
 
 RESPOSTA OBRIGATÓRIA EM JSON:
 {
-  "actions": [],
+  "actions": [
+    { "action": "TASK", "parsedData": { "title": "...", "due_date": "ISO-DATE" } },
+    { "action": "EXPENSE", "parsedData": { "amount": 0.0, "description": "..." } },
+    { "action": "PAY", "parsedData": {} }
+  ],
   "reply": "Sua resposta natural aqui."
 }
-*Nota: Nunca mande texto fora do JSON.*`;
+*Nota: A ação 'PAY' gera um link de pagamento Stripe.*`;
 
     // 4. Chamada IA (Modo JSON Forçado para estabilidade absoluta)
     const upstream = await fetch("https://api.deepseek.com/v1/chat/completions", {
@@ -193,6 +202,18 @@ RESPOSTA OBRIGATÓRIA EM JSON:
             const de = await prisma.expense.deleteMany({ where: { user_id: user.id, description: { contains: s, mode: 'insensitive' } } });
             aiResponse.reply = `🗑️ *Removido:* ${dt.count + de.count} itens contendo "${s}".`;
           }
+          hasChange = true;
+        } else if (action === "PAY") {
+          console.log(`[${remoteJid}] 💳 Usuário solicitou checkout.`);
+          const session = await stripe.checkout.sessions.create({
+            payment_method_types: ['card'],
+            line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
+            mode: 'subscription',
+            client_reference_id: remoteJid,
+            success_url: `${APP_URL}/success.html`,
+            cancel_url: `${APP_URL}/cancel.html`,
+          });
+          aiResponse.reply += `\n\n🔗 *Ative sua assinatura aqui:* ${session.url}`;
           hasChange = true;
         }
       } catch(e) { console.error("Erro DB Action:", e.message); }
