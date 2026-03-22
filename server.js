@@ -270,8 +270,10 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  const cleanUrl = req.url.split('?')[0].replace(/\/$/, '');
+
   // Webhook Stripe
-  if (req.method === 'POST' && req.url === '/webhook/stripe') {
+  if (req.method === 'POST' && cleanUrl === '/webhook/stripe') {
     let body = "";
     req.on("data", c => body += c);
     req.on("end", async () => {
@@ -308,7 +310,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Webhook Evolution (WhatsApp)
-  if (req.method === "POST" && (req.url === "/webhook/evolution" || req.url === "/webhook")) {
+  if (req.method === "POST" && (cleanUrl === "/webhook/evolution" || cleanUrl === "/webhook")) {
     let body = "";
     req.on("data", c => body += c);
     req.on("end", async () => {
