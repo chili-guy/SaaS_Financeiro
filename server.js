@@ -153,8 +153,8 @@ REGRAS DE OURO:
 3. RESUMOS: Se o usuário te der um "Bom dia/Olá" ou perguntar "O que tenho pra hoje?", responda com um resumo curtíssimo das tarefas e gastos.
 4. PROATIVIDADE: Use os dados para insights breves. Ex: "Gastou R$50 ontem. Tudo certo?".
 5. LEMBRETES ATIVOS (PODER REAL): Você POSSUI um sistema de agendamento automático. Se ele pedir "Me lembre de X às 14h", salve como TASK e diga: "Agendado para as 14h. Te aviso! 🔔".
-4. PERSISTÊNCIA: Nunca diga que "nada fica salvo". Use a ação "CHAT" para responder usando os dados acima.
-5. Se o usuário for vago ao pedir um gasto ou tarefa, diga que já salvou e peça confirmação.
+6. PERSISTÊNCIA: Nunca diga que "nada fica salvo". Use a ação "CHAT" para responder usando os dados acima.
+7. Se o usuário for vago ao pedir um gasto ou tarefa, diga que já salvou e peça confirmação.
 
 RESPOSTA OBRIGATÓRIA EM JSON:
 {
@@ -169,11 +169,9 @@ RESPOSTA OBRIGATÓRIA EM JSON:
   "reply": "Sua resposta amigável e rica em contexto aqui."
 }
 
-INSTRUÇÃO IMPORTANTE SOBRE GASTOS VS TAREFAS:
-- Use EXPENSE apenas para dinheiro que JÁ FOI GASTO ou pago NO MOMENTO.
-- Use TASK para compromissos, lembretes ou DÍVIDAS/PAGAMENTOS FUTUROS. 
-- Se o usuário falar de um valor com data futura, registre apenas como TASK.
-- Se o usuário pedir para 'concluir', 'marcar como feito' ou 'ja paguei' uma tarefa, use a ação DONE e informe o taskId (se souber) ou o título no campo title.`;
+INSTRUÇÃO DE CONTEXTO:
+- Se a resposta para a pergunta (ex: lista recente, total rápido de 20 itens ou um lembrete específico) já estiver nos DADOS DO USUÁRIO acima, use a ação CHAT e responda diretamente.
+- Use QUERY apenas se precisar buscar um item específico que NÃO está na lista acima ou se o usuário pedir o "Total Geral" de todo o histórico.`;
 
         // Chama a Inteligência Artificial
         const upstream = await fetch("https://api.deepseek.com/v1/chat/completions", {
@@ -245,38 +243,45 @@ INSTRUÇÃO IMPORTANTE SOBRE GASTOS VS TAREFAS:
             });
           } else if (action === "QUERY") {
             const searchTerm = (parsedData.searchTerm || parsedData.description || "").trim().toLowerCase();
-            const isTaskSearch = searchTerm.includes("tarefa") || searchTerm.includes("lembrete") || searchTerm.includes("pendente");
+            const isTotal = searchTerm.includes("total") || searchTerm.includes("soma") || searchTerm.includes("quanto");
             
-            if (isTaskSearch) {
-              console.log(`[${remoteJid}] Buscando Tarefas: ${searchTerm}`);
-              const tasks = await prisma.task.findMany({
-                where: { user_id: user.id, completed: false },
-                orderBy: { due_date: 'asc' },
-                take: 10
-              });
-              
-              if (tasks.length > 0) {
-                 const list = tasks.map(t => `• *${t.title}* ${t.due_date ? `(_${new Date(t.due_date).toLocaleString('pt-BR')}_)` : ""}`).join("\n");
-                 aiResponse.reply = `✅ *Aqui estão suas tarefas pendentes:*\n\n${list}`;
-              } else {
-                 aiResponse.reply = `Você não tem nenhuma tarefa pendente no momento! Tudo dominado. 🚀`;
-              }
+            if (isTotal) {
+              const expenses = await prisma.expense.findMany({ where: { user_id: user.id } });
+              const total = expenses.reduce((s, e) => s + e.amount, 0);
+              const tasks = await prisma.task.count({ where: { user_id: user.id, completed: false } });
+              aiResponse.reply = `📊 *Resumo Geral:* \n\n*Total de Gastos:* R$ ${total.toFixed(2)}\n*Tarefas Pendentes:* ${tasks}\n\nAlgo mais que eu possa ajudar?`;
             } else {
-              console.log(`[${remoteJid}] Buscando Gasto: ${searchTerm}`);
-              const results = await prisma.expense.findMany({
-                where: { 
-                  user_id: user.id,
-                  description: { contains: searchTerm, mode: 'insensitive' }
-                },
-                orderBy: { date: 'desc' },
-                take: 10
-              });
+              const isTaskSearch = searchTerm.includes("tarefa") || searchTerm.includes("lembrete") || searchTerm.includes("pendente") || searchTerm.includes("resumo");
               
-              if (results.length > 0) {
-                 const list = results.map(e => `• *R$${e.amount.toFixed(2)}* - ${e.description} (_${e.date.toLocaleDateString('pt-BR')}_)`).join("\n");
-                 aiResponse.reply = `✅ *Encontrei estas informações de gastos para "${searchTerm}":*\n\n${list}`;
+              if (isTaskSearch) {
+                 const tasks = await prisma.task.findMany({
+                   where: { user_id: user.id, completed: false, title: { contains: searchTerm.replace(/tarefa|lembrete|pendente|resumo/g, "").trim(), mode: 'insensitive' } },
+                   orderBy: { due_date: 'asc' }, take: 10
+                 });
+                 if (tasks.length > 0) {
+                    aiResponse.reply = `✅ *Tarefas encontradas:*\n\n` + tasks.map(t => `• *${t.title}*`).join("\n");
+                 } else {
+                    aiResponse.reply = `Não encontrei nenhuma tarefa correspondente a "${searchTerm}". 🧐`;
+                 }
               } else {
-                 aiResponse.reply = `Puxa, não encontrei nenhum registro de gasto para "${searchTerm}". 🧐\n\n_Dica: Se queria ver suas tarefas, tente perguntar "quais são minhas tarefas"._`;
+                 const expenses = await prisma.expense.findMany({
+                   where: { user_id: user.id, description: { contains: searchTerm, mode: 'insensitive' } },
+                   orderBy: { date: 'desc' }, take: 10
+                 });
+                 if (expenses.length > 0) {
+                    aiResponse.reply = `✅ *Gastos encontrados:*\n\n` + expenses.map(e => `• *R$${e.amount}* - ${e.description}`).join("\n");
+                 } else {
+                    // Fallback: busca na tabela de tarefas se não achou gastos
+                    const fallbackTasks = await prisma.task.findMany({
+                      where: { user_id: user.id, completed: false, title: { contains: searchTerm, mode: 'insensitive' } },
+                      take: 5
+                    });
+                    if (fallbackTasks.length > 0) {
+                      aiResponse.reply = `Não achei gastos, mas encontrei estas tarefas: \n` + fallbackTasks.map(t => `• *${t.title}*`).join("\n");
+                    } else {
+                      aiResponse.reply = `Não encontrei nenhum registro de gasto ou tarefa para "${searchTerm}". 🧐`;
+                    }
+                 }
               }
             }
           } else if (action === "DONE") {
