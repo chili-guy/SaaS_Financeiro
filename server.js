@@ -80,28 +80,37 @@ RESPOSTA OBRIGATÓRIA EM JSON:
 }
 *Regra Absoluta: Nunca mande texto fora do JSON.*`;
 
-    // 4. Chamada IA
+    // 4. Chamada IA (Modo JSON Forçado para estabilidade absoluta)
     const upstream = await fetch("https://api.deepseek.com/v1/chat/completions", {
       method:  "POST",
       headers: { "Content-Type":  "application/json", "Authorization": `Bearer ${DEEPSEEK_API_KEY}` },
       body: JSON.stringify({
         model: "deepseek-chat",
         messages: [{ role: "system", "content": sysPrompt }, ...memory, { role: "user", "content": msgText }],
-        temperature: 0.2
+        temperature: 0.1,
+        response_format: { type: "json_object" } // QA: Obriga a IA a responder JSON válido
       }),
     });
 
     const dsData = await upstream.json();
     if (!upstream.ok) return console.error("Erro AI:", dsData);
 
-    let rawContent = dsData.choices?.[0]?.message?.content || "{}";
-    let aiResponse = { actions: [], reply: "Desculpe, tive um soluço técnico. Pode repetir?" };
+    let rawContent = dsData.choices?.[0]?.message?.content || "";
+    let aiResponse = { actions: [], reply: "" };
 
     try {
       const s = rawContent.indexOf('{');
       const e = rawContent.lastIndexOf('}');
-      if (s !== -1 && e !== -1) aiResponse = JSON.parse(rawContent.substring(s, e + 1));
-    } catch(e) { console.error("Erro Parse JSON AI"); }
+      if (s !== -1 && e !== -1) {
+        aiResponse = JSON.parse(rawContent.substring(s, e + 1));
+      } else {
+        // Fallback: Se não tem chaves, assume que a IA mandou texto puro por erro
+        aiResponse.reply = rawContent.trim();
+      }
+    } catch(e) { 
+      console.error("Erro Parse JSON AI, usando rawContent como fallback");
+      aiResponse.reply = rawContent.trim() || "Tive um soluço técnico. Pode repetir?";
+    }
 
     // 5. Execução de Ações
     const actions = aiResponse.actions || [];
