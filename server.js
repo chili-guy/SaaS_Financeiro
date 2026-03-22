@@ -159,7 +159,7 @@ REGRAS DE OURO:
 
 RESPOSTA OBRIGATÓRIA EM JSON:
 {
-  "action": "(TASK | EXPENSE | NOTE | CHAT | QUERY | DONE)",
+  "action": "(TASK | EXPENSE | NOTE | CHAT | QUERY | DONE | DELETE)",
   "parsedData": {
      "title": "...", "due_date": "ISO8601", 
      "amount": 0.0, "description": "...", 
@@ -229,14 +229,35 @@ INSTRUÇÃO DE CONTEXTO:
               data: { user_id: user.id, amount: Number(parsedData.amount), description: parsedData.description }
             });
           } else if (action === "TASK" && parsedData.title) {
-            console.log(`[${remoteJid}] Agendando Tarefa: ${parsedData.title}`);
-            await prisma.task.create({
-              data: { 
-                user_id: user.id, 
-                title: parsedData.title, 
-                due_date: parsedData.due_date ? new Date(parsedData.due_date) : null 
+            console.log(`[${remoteJid}] Analisando Tarefa: ${parsedData.title}`);
+            
+            // Verifica se já existe uma tarefa identica ou muito parecida não concluída
+            const existingTask = await prisma.task.findFirst({
+              where: {
+                user_id: user.id,
+                completed: false,
+                title: { contains: parsedData.title, mode: 'insensitive' }
               }
             });
+
+            if (existingTask) {
+              console.log(`[${remoteJid}] Atualizando tarefa existente: ${existingTask.id}`);
+              await prisma.task.update({
+                where: { id: existingTask.id },
+                data: { 
+                  due_date: parsedData.due_date ? new Date(parsedData.due_date) : existingTask.due_date 
+                }
+              });
+              aiResponse.reply = `✅ *Tarefa Atualizada!* \n\nJá ajustei o horário de "${existingTask.title}". Tudo pronto! 🔔`;
+            } else {
+              await prisma.task.create({
+                data: { 
+                  user_id: user.id, 
+                  title: parsedData.title, 
+                  due_date: parsedData.due_date ? new Date(parsedData.due_date) : null 
+                }
+              });
+            }
           } else if (action === "NOTE" && parsedData.text) {
             console.log(`[${remoteJid}] Criando Nota`);
             await prisma.note.create({
@@ -316,6 +337,30 @@ INSTRUÇÃO DE CONTEXTO:
               } else {
                 aiResponse.reply = `Não encontrei nenhuma tarefa pendente com o nome "${search}" para concluir. 🧐`;
               }
+            }
+          } else if (action === "DELETE") {
+            const search = parsedData.title || parsedData.searchTerm || "";
+            console.log(`[${remoteJid}] Deletando: ${search}`);
+
+            // Tenta deletar tanto de tarefas quanto de gastos para ser flexível
+            const deletedTasks = await prisma.task.deleteMany({
+              where: {
+                user_id: user.id,
+                title: { contains: search, mode: 'insensitive' }
+              }
+            });
+
+            const deletedExpenses = await prisma.expense.deleteMany({
+              where: {
+                user_id: user.id,
+                description: { contains: search, mode: 'insensitive' }
+              }
+            });
+
+            if (deletedTasks.count > 0 || deletedExpenses.count > 0) {
+              aiResponse.reply = `🗑️ *Removido com sucesso!* \n\nLimpei ${deletedTasks.count} tarefas e ${deletedExpenses.count} gastos relacionados a "${search}".`;
+            } else {
+              aiResponse.reply = `Não encontrei nada para remover com o nome "${search}".`;
             }
           }
         } catch(dbErr) {
