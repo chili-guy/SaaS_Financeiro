@@ -329,20 +329,20 @@ INSTRUÇÃO DE CONTEXTO:
         }
 
         // --- Garantia de Resposta QA ---
-        const finalReply = aiResponse.reply || (hasChange ? "Ação realizada com sucesso! ✅" : "Entendido! 👍");
+        const finalReply = String(aiResponse.reply || (hasChange ? "Tudo pronto! ✅" : "Entendido! 👍")).trim();
         
-        let bodyPayload = { 
-          number: remoteJid, 
-          text: finalReply
-        };
-        // Salvo o histórico pra ele lembrar o que falou
-        if (finalReply) {
-          await prisma.message.create({ data: { user_id: user.id, role: "assistant", content: finalReply } });
-        }
+        // Salvo o histórico
+        await prisma.message.create({ data: { user_id: user.id, role: "assistant", content: finalReply } });
 
         // Dispara de Volta pelo Cânion da Evolution!
         const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/${hasChange ? 'sendButtons' : 'sendText'}/${payload.instance}`;
         
+        let bodyPayload = { 
+          number: remoteJid, 
+          text: finalReply,
+          description: finalReply // Fallback para versões específicas da Evolution
+        };
+
         if (hasChange) {
           const itemTitle = lastActionableData.title || lastActionableData.description || lastActionableData.searchTerm || "";
           bodyPayload.buttons = [
