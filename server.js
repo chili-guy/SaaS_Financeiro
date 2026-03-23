@@ -137,10 +137,11 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
 7. **INSTRUÇÃO PROATIVA**: Para comandos vagos, dê um exemplo útil (ex: "Pode me mandar seus gastos ou pedir para eu lembrar de algo!").
 8. **CATEGORIZAÇÃO**: Atribua sempre uma categoria lógica aos gastos (EXPENSE).
 9. **SEM NEGRITOS**: Proibido usar "*" ou "**". Texto 100% limpo.
-10. **FOCO NO AGORA**: Só gere "actions" para o que foi pedido na mensagem ATUAL. Ignore o que já foi confirmado.
-11. **REGRA DO HORÁRIO (CRÍTICA)**: SÓ defina "due_date" em uma TASK se o usuário mencionar um horário ou data específica (ex: "às 10h", "amanhã cedo"). Se não houver horário, deixe "due_date" como null. NUNCA use "Z" no final da data. Use o formato "YYYY-MM-DDTHH:mm:ss" puro para o horário de Brasília.
-12. **COMPORTAMENTO CONSULTIVO**: Se o usuário registrar uma tarefa importante SEM horário, pergunte: "Quer que eu te lembre disso em algum horário específico?".
-13. **DISCRIÇÃO TOTAL**: NUNCA mencione termos técnicos como "REGISTROS INTERNOS", "DADOS DO SISTEMA", "JSON", "ACTIONS" ou "BANCO DE DADOS". Fale como um mentor humano real. Se perguntarem pelos dados, diga que você os tem anotados.
+10. **FOCO NO AGORA**: Só gere "actions" para o que foi pedido na mensagem ATUAL.
+11. **COMANDO DELETE (CRÍTICO)**: Se o usuário pedir para "limpar", "apagar", "zerar" ou "resetar" (seja tarefas ou gastos), você DEVE obrigatoriamente incluir a action "DELETE" com parsedData.title igual a "tudo" (se for tudo) ou o termo específico. Nunca apenas responda em texto que limpou sem mandar a action.
+12. **REGRA DO HORÁRIO (CRÍTICA)**: SÓ defina "due_date" em uma TASK se o usuário mencionar um horário ou data específica.
+13. **ZERO HALLUCINATION**: Se o campo "REGISTROS INTERNOS" acima contiver tarefas ou gastos, e o usuário perguntar o que tem lá, você DEVE listar o que está lá. NUNCA diga que a lista está vazia se houver itens nos registros internos.
+14. **DISCRIÇÃO TOTAL**: Fale como um humano. Se perguntarem pelos dados, diga que você os tem anotados.
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
@@ -261,16 +262,17 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
           console.log(`[${remoteJid}] ✨ Limpeza de duplicatas: ${removed} removidos.`);
         } else if (action === "DELETE") {
           const s = (parsedData.title || "").toLowerCase();
-          // Sinônimos de "Limpar Tudo" para evitar deletar itens específicos com esses nomes
           const isFullCleanup = s.includes("tudo") || s.includes("todas") || s.includes("toda") || 
                                 s.includes("lista") || s.includes("agenda") || s.includes("histórico") ||
+                                s.includes("limpar") || s.includes("apagar") || s.includes("zerar") ||
                                 s.includes("registros") || s === "tarefas" || s === "gastos";
 
           if (isFullCleanup) {
-            console.log(`[${remoteJid}] 🗑️ LIMPANDO TUDO (Tasks + Expenses)...`);
+            console.log(`[${remoteJid}] 🗑️ LIMPANDO TUDO (Tasks + Expenses + Incomes)...`);
             const dt = await prisma.task.deleteMany({ where: { user_id: user.id } });
             const de = await prisma.expense.deleteMany({ where: { user_id: user.id } });
-            aiResponse.reply = `🗑️ *TUDO LIMPO!* \n\nAcabei de remover suas ${dt.count} tarefas e registros de gastos. Estamos prontos para um novo começo! ✨`;
+            const di = await prisma.income.deleteMany({ where: { user_id: user.id } });
+            aiResponse.reply = `🗑️ *TUDO LIMPO!* \n\nAcabei de remover suas ${dt.count} tarefas e registros financeiros. Estamos prontos para um novo começo! ✨`;
           } else {
             console.log(`[${remoteJid}] 🗑️ Removendo itens específicos: "${s}"...`);
             const dt = await prisma.task.deleteMany({ where: { user_id: user.id, title: { contains: s, mode: 'insensitive' } } });
