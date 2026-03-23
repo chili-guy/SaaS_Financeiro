@@ -1,3 +1,4 @@
+process.env.TZ = "America/Sao_Paulo";
 import 'dotenv/config';
 import http from "http";
 import fs   from "fs";

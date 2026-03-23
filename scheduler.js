@@ -1,3 +1,4 @@
+process.env.TZ = "America/Sao_Paulo";
 import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
