@@ -261,9 +261,21 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
           console.log(`[${remoteJid}] 🔎 Buscando informações históricas...`);
           const term = (parsedData.searchTerm || "").toLowerCase().trim();
           
-          const k = ["gastos", "despesas", "receitas", "ganhos", "saldo", "total", "balanço", "relatório", "dividas", "dívidas", "contas", "boletos", "debito", "débito", "pendencias", "pendências", "financeiro", "extrato", "liste", "quais", "ver", "com"];
+          const isFinancial = ["gastos", "despesas", "receitas", "ganhos", "saldo", "total", "balanço", "relatório", "dividas", "dívidas", "contas", "boletos", "debito", "débito", "pendencias", "pendências", "financeiro", "extrato"].some(k => term.includes(k));
+          const isTask      = ["tarefa", "agenda", "compromisso", "lembrete", "marcado"].some(k => term.includes(k));
           
-          if (!term || k.some(key => term.includes(key))) {
+          if (isTask) {
+            const list = await prisma.task.findMany({ 
+              where: { user_id: user.id, completed: false }, 
+              orderBy: { due_date: 'asc' } 
+            });
+            aiResponse.reply = list.length > 0 
+              ? `✅ *Sua Agenda de Tarefas:*\n\n` + list.map(t => {
+                  const dateStr = t.due_date ? new Date(t.due_date).toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }) : "[SEM DATA]";
+                  return `• ${t.title} ${dateStr}`;
+                }).join("\n") 
+              : "Sua lista de tarefas está zerada! 🎉";
+          } else if (isFinancial || !term || term.includes("liste") || term.includes("quais") || term.includes("ver")) {
             const dateFilter = term.includes("mês passado") ? { gte: new Date(now.getFullYear(), now.getMonth() - 1, 1), lt: new Date(now.getFullYear(), now.getMonth(), 1) } : { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
             
             if (term.includes("gastos") || term.includes("divida") || term.includes("débito") || term.includes("contas")) {
@@ -277,11 +289,9 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
               const totalE = eSum._sum.amount || 0;
               const totalI = iSum._sum.amount || 0;
               aiResponse.reply = `📊 *Resumo ${term.includes("passado") ? "do Mês Passado" : "Mensal"}:*\n\n💰 Receitas: R$ ${totalI.toFixed(2)}\n💸 Gastos: R$ ${totalE.toFixed(2)}`;
-              // Removemos o saldo automático conforme pedido do usuário
             }
           } else {
-            const list = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, orderBy: { due_date: 'asc' } });
-            aiResponse.reply = list.length > 0 ? `✅ Suas Tarefas:\n` + list.map(t => `• ${t.title}`).join("\n") : "Sua lista de tarefas está zerada! 🎉";
+            aiResponse.reply = "Pode me perguntar sobre seus gastos ou suas tarefas que eu te ajudo! 🚀";
           }
         } else if (action === "INCOME" && parsedData.amount) {
           const val = parseFloat(String(parsedData.amount).replace(',', '.').replace(/[^\d.]/g, ''));
