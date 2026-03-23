@@ -29,6 +29,17 @@ const userLocks      = new Set(); // Trava de processamento por usuário
 const DEBOUNCE_TIME  = 2500; 
 
 /**
+ * Helper para limpar títulos de tarefas (Remove "Marcar", "Lembrar", etc)
+ */
+function cleanTitle(title) {
+  if (!title) return "";
+  return title
+    .replace(/^(marcar|agendar|anotar|lembrar de|lembrar|criar|adicionar|por|colocar|novo|nova)\s+/i, "")
+    .trim()
+    .replace(/^\w/, (c) => c.toUpperCase());
+}
+
+/**
  * Motor Central de Inteligência do Nico
  */
 async function processNicoCore(remoteJid, msgText, instance) {
@@ -211,7 +222,8 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
             hasChange = true;
           }
         } else if (action === "TASK" && parsedData.title) {
-          const existing = await prisma.task.findFirst({ where: { user_id: user.id, completed: false, title: { contains: parsedData.title, mode: 'insensitive' } } });
+          const title = cleanTitle(parsedData.title);
+          const existing = await prisma.task.findFirst({ where: { user_id: user.id, completed: false, title: { contains: title, mode: 'insensitive' } } });
           const finalDueDate = parsedData.due_date ? new Date(String(parsedData.due_date).replace(/Z$/i, "")) : null;
           if (existing) {
             console.log(`[${remoteJid}] ⏳ ATUALIZANDO TAREFA: "${existing.title}" para ${finalDueDate}...`);
@@ -220,8 +232,8 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
               data: { due_date: finalDueDate || existing.due_date, notified: false, notified_5min: false } 
             });
           } else {
-            console.log(`[${remoteJid}] 📝 CRIANDO TAREFA: "${parsedData.title}" para ${finalDueDate}...`);
-            await prisma.task.create({ data: { user_id: user.id, title: parsedData.title, due_date: finalDueDate } });
+            console.log(`[${remoteJid}] 📝 CRIANDO TAREFA: "${title}" para ${finalDueDate}...`);
+            await prisma.task.create({ data: { user_id: user.id, title: title, due_date: finalDueDate } });
           }
           hasChange = true;
         } else if (action === "QUERY") {
@@ -319,25 +331,36 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
     const parts = finalReply.split("\n\n").filter(p => p.trim() !== "");
     const instanceName = instance || "main";
 
+    console.log(`[${remoteJid}] 📤 Iniciando envio de ${parts.length} partes...`);
+
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i].trim();
       const isLastPart = i === parts.length - 1;
       const hasTaskAction = actions.some(a => a.action === "TASK");
-
-      if (isLastPart && hasTaskAction) {
-        // Tenta enviar botões, se falhar, envia como texto normal
-        const btnSuccess = await sendEvolutionButtons(remoteJid, part, instanceName, [
-          { id: "confirm_task", text: "Ver Agenda 📅" },
-          { id: "done_last", text: "Concluir Última ✅" }
-        ]);
+      
+      try {
+        console.log(`[${remoteJid}] 📤 Enviando parte ${i + 1}/${parts.length}...`);
         
-        if (!btnSuccess) {
-          console.log(`[${remoteJid}] ⚠️ Fallback: Enviando como texto pois botões falharam.`);
+        if (isLastPart && hasTaskAction) {
+          // Tenta enviar botões, se falhar, envia como texto normal
+          const btnSuccess = await sendEvolutionButtons(remoteJid, part, instanceName, [
+            { id: "confirm_task", text: "Ver Agenda 📅" },
+            { id: "done_last", text: "Concluir Última ✅" }
+          ]);
+          
+          if (!btnSuccess) {
+            console.log(`[${remoteJid}] ⚠️ Fallback: Enviando como texto pois botões falharam.`);
+            await sendText(remoteJid, part, instanceName);
+          }
+        } else {
           await sendText(remoteJid, part, instanceName);
         }
-      } else {
-        await sendText(remoteJid, part, instanceName);
+      } catch (sendErr) {
+        console.error(`[${remoteJid}] ❌ Erro ao enviar parte ${i + 1}:`, sendErr.message);
+        // Tenta um último fallback se não for o que já falhou
+        await sendText(remoteJid, part, instanceName).catch(() => {});
       }
+      
       await new Promise(r => setTimeout(r, 1000));
     }
 
