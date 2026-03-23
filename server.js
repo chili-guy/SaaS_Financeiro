@@ -153,9 +153,10 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
 12. **COMANDO DELETE**: Se o usuário pedir para limpar tarefas, use DELETE com title "tarefas". Se for financeiro, use "financeiro".
 13. **REMARCAR (UPDATE)**: Se o usuário quiser mudar o horário de uma tarefa já mencionada, use a ação TASK com o mesmo título e o novo "due_date".
 14. **INTELIGÊNCIA DE TEMPO**: Se o usuário disser algo confuso como "Mandei o lembrete às 18h", NÃO aceite literalmente. Questione se ele quer que VOCÊ mande o lembrete nesse horário e já gere a ação TASK para atualizar o horário.
-17. **AGENDAMENTO**: Se o usuário mencionar um horário (ex: "Jantar 19h"), gere IMEDIATAMENTE a ação TASK incluindo esse horário. ANTES de salvar o lembrete ativo, PERGUNTE: "Anotei seu compromisso para às 19:00. Quer que eu agende o lembrete (te avisando 15 min antes e na hora)?". Se ele disser "Não", você deve enviar uma segunda ação TASK atualizando para "notified": true (isso salva o horário no banco mas silencia o alarme).
-18. **DATAS RELATIVAS**: Entenda "hoje", "amanhã", "segunda" etc., usando a Data Atual de referência. Sempre salve no banco a data correta no campo "due_date" da ação TASK.
-19. **SALDO E RELATÓRIOS**: NÃO mostre o saldo automaticamente. Registre e confirme diretamente.
+17. **AGENDAMENTO**: Se o usuário fornecer um horário (ex: "Jantar 19h"), use esse horário na ação TASK imediatamente. Pergunte se quer o lembrete (15 min antes e na hora). Se ele disser "Não", envie outra ação TASK com "notified": true para silenciar, mas manter o horário salvo.
+18. **DATAS RELATIVAS**: Para gastos (EXPENSE) ou tarefas (TASK), converta "hoje", "amanhã", "ontem" ou "quinta" em datas reais usando a Data Atual como base rígida. Sempre preencha o campo "date" (gasto) ou "due_date" (tarefa).
+19. **SALDO ZERO**: NUNCA mostre o saldo, total de gastos ou relatórios financeiros se não for perguntado explicitamente ("Quanto gastei?", "Qual meu saldo?"). Responda apenas "Registrado! ✅" ou similar.
+20. **TÍTULO ORIGINAL**: Ao atualizar o horário de uma tarefa (ex: "Mude o lembrete para 18h"), NÃO mude o título para "Lembrete". Mantenha o título original do compromisso (ex: "Jantar").
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
@@ -212,12 +213,14 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
         if (action === "EXPENSE" && parsedData.amount) {
           const val = parseFloat(String(parsedData.amount).replace(',', '.').replace(/[^\d.]/g, ''));
           if (val > 0) {
+            const expDate = parsedData.date ? new Date(String(parsedData.date).replace(/Z$/i, "")) : new Date();
             await prisma.expense.create({ 
               data: { 
                 user_id: user.id, 
                 amount: val, 
                 description: parsedData.description || "Gasto",
-                category: parsedData.category || "Outros"
+                category: parsedData.category || "Outros",
+                date: expDate
               } 
             });
             hasChange = true;
