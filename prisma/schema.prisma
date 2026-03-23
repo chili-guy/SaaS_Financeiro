@@ -39,6 +39,7 @@ model Expense {
   user        User     @relation(fields: [user_id], references: [id])
   amount      Float
   description String
+  category    String   @default("Outros")
   date        DateTime @default(now())
 
   @@map("fin_expenses")

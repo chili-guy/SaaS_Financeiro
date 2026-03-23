@@ -78,7 +78,9 @@ async function processNicoCore(remoteJid, msgText, instance) {
       ? pendingTasks.map(t => `- ${t.title}${t.due_date ? ` [DATA: ${t.due_date.toISOString()}]` : " [SEM DATA]"}`).join("\n") 
       : "Nenhuma pendente";
 
-    const myExpStr   = expenses.length > 0 ? expenses.map(e => `R$${e.amount} (${e.description})`).join(", ") : "Nenhum gasto recente";
+    const myExpStr   = expenses.length > 0 
+      ? expenses.map(e => `- R$${e.amount} em ${e.description} (${e.category}) [DATA: ${e.date.toISOString()}]`).join("\n") 
+      : "Nenhum gasto recente";
     const dataAtual  = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
     console.log(`[AI Context] User: ${user.phone_number} | Tasks: ${myTasksStr}`);
@@ -108,12 +110,13 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
 5. **BREVIDADE EXTREMA**: Seja extremamente sucinto. Responda o essencial em no máximo 2 frases curtas por bloco. Evite frases de preenchimento ("Como posso ajudar?", "Estou aqui para você", "É um prazer"). Vá direto ao ponto.
 6. **EQUILÍBRIO DE EMOJIS**: Use apenas 1 emoji por parágrafo para manter a leveza sem poluir visualmente. Use negrito para valores e datas.
 7. **INSTRUÇÃO PROATIVA**: Se o usuário der comandos genéricos ou vagos (ex: "Agenda", "Gastos", "Comando"), responda com um exemplo prático de uso (ex: "Pode me mandar seus gastos ou pedir para eu lembrar de algo!"). Seja educativo.
+8. **CATEGORIZAÇÃO AUTOMÁTICA**: Ao registrar um gasto (EXPENSE), atribua SEMPRE uma categoria lógica (ex: Alimentação, Transporte, Lazer, Saúde, Contas Fixas, Outros).
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
   "actions": [
     { "action": "TASK", "parsedData": { "title": "string", "due_date": "ISO-DATE" } },
-    { "action": "EXPENSE", "parsedData": { "amount": float, "description": "string" } },
+    { "action": "EXPENSE", "parsedData": { "amount": float, "description": "string", "category": "string" } },
     { "action": "PAY", "parsedData": {} }
   ],
   "reply": "Sua resposta natural fatiada em parágrafos com \\n\\n para eu poder separar em bolhas."
@@ -163,7 +166,14 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
         if (action === "EXPENSE" && parsedData.amount) {
           const val = parseFloat(String(parsedData.amount).replace(',', '.').replace(/[^\d.]/g, ''));
           if (val > 0) {
-            await prisma.expense.create({ data: { user_id: user.id, amount: val, description: parsedData.description || "Gasto" } });
+            await prisma.expense.create({ 
+              data: { 
+                user_id: user.id, 
+                amount: val, 
+                description: parsedData.description || "Gasto",
+                category: parsedData.category || "Outros"
+              } 
+            });
             hasChange = true;
           }
         } else if (action === "TASK" && parsedData.title) {
