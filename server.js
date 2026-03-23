@@ -148,7 +148,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 7. **INSTRUÇÃO PROATIVA**: Para comandos vagos, dê um exemplo útil (ex: "Pode me mandar seus gastos ou pedir para eu lembrar de algo!").
 8. **CATEGORIZAÇÃO**: Atribua sempre uma categoria lógica aos gastos (EXPENSE).
 9. **SEM NEGRITOS**: Proibido usar "*" ou "**". Texto 100% limpo.
-10. **FOCO NO AGORA**: Só gere "actions" para o que foi pedido na mensagem ATUAL.
+10. **MÚLTIPLOS PEDIDOS**: Se a mensagem contiver vários pedidos (ex: várias tarefas ou gastos), você DEVE gerar uma "action" separada para cada um deles no mesmo JSON. Nunca ignore partes da mensagem.
 11. **SEM REPETIÇÃO**: Se o usuário disser "Ok", "Valeu" ou similar, responda apenas com texto.
 12. **COMANDO DELETE**: Se o usuário pedir para limpar tarefas, use DELETE com title "tarefas". Se for financeiro, use "financeiro".
 13. **REMARCAR (UPDATE)**: Se o usuário quiser mudar o horário de uma tarefa já mencionada, use a ação TASK com o mesmo título e o novo "due_date".
@@ -578,8 +578,8 @@ const server = http.createServer(async (req, res) => {
 
         if (buffer.timer) clearTimeout(buffer.timer);
         buffer.timer = setTimeout(() => {
-          const fullMsg = buffer.texts.join(" ");
-          const instance = payload.instance || "main";
+          const fullMsg = buffer.texts.join("\n");
+          const instance = (payload.instance?._id || payload.instance || "main");
           messageBuffers.delete(remoteJid);
           processNicoCore(remoteJid, fullMsg, instance);
         }, DEBOUNCE_TIME);
