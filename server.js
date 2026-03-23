@@ -24,7 +24,7 @@ const APP_URL              = process.env.APP_URL || "http://localhost:3000";
 // --- Buffer de Mensagens (QA: Debounce para evitar múltiplas notificações) ---
 const messageBuffers = new Map();
 const processedIds   = new Set(); // Cache para evitar mensagens duplicadas (re-entregas)
-const DEBOUNCE_TIME = 2500; // Aguarda 2.5s antes de processar
+const DEBOUNCE_TIME = 3500; // Aguarda 3.5s para agrupar mensagens rápidas
 
 /**
  * Motor Central de Inteligência do Nico
@@ -108,9 +108,11 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
 3. **PENSAMENTO ECONÔMICO**: Diferencie "registrei um gasto" de "criei uma tarefa". Dinheiro é transação (EXPENSE), compromisso é tarefa (TASK).
 4. **TRIAL AWARENESS**: Se o status for TRIAL e for a PRIMEIRA interação real (msgCount <= 1), informe sobre os 30 dias de presente. Caso contrário, ignore o trial.
 5. **BREVIDADE EXTREMA**: Seja extremamente sucinto. Responda o essencial em no máximo 2 frases curtas por bloco. Evite frases de preenchimento ("Como posso ajudar?", "Estou aqui para você", "É um prazer"). Vá direto ao ponto.
-6. **EQUILÍBRIO DE EMOJIS**: Use apenas 1 emoji por parágrafo para manter a leveza sem poluir visualmente. Use negrito para valores e datas.
+6. **EQUILÍBRIO DE EMOJIS**: Use apenas 1 emoji por parágrafo para manter a leveza sem poluir visualmente. NUNCA use NEGRITO ou asteriscos.
 7. **INSTRUÇÃO PROATIVA**: Se o usuário der comandos genéricos ou vagos (ex: "Agenda", "Gastos", "Comando"), responda com um exemplo prático de uso (ex: "Pode me mandar seus gastos ou pedir para eu lembrar de algo!"). Seja educativo.
-8. **CATEGORIZAÇÃO AUTOMÁTICA**: Ao registrar um gasto (EXPENSE), atribua SEMPRE uma categoria lógica (ex: Alimentação, Transporte, Lazer, Saúde, Contas Fixas, Outros).
+8. **CATEGORIZAÇÃO AUTOMÁTICA**: Ao registrar um gasto (EXPENSE), atribua SEMPRE uma categoria lógica.
+9. **SEM ASTERISCOS**: Proibido usar "*" ou "**". Entregue o texto totalmente limpo.
+10. **FOCO NO AGORA**: Só retorne "actions" para o que o usuário pediu na MENSAGEM ATUAL. Se o seu próprio histórico de respostas já mostra que você confirmou um gasto ou tarefa anteriormente (ex: "Registrei R$20"), NUNCA gere a "action" novamente. Ignore o passado para evitar duplicatas.
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
@@ -190,7 +192,7 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
           const isGeneric = !term || ["lista", "tarefas", "resumo", "tudo", "gastos"].some(k => term.includes(k));
           if (isGeneric) {
             const list = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, orderBy: { due_date: 'asc' } });
-            aiResponse.reply = list.length > 0 ? `✅ *Suas Tarefas:*\n` + list.map(t => `• *${t.title}*`).join("\n") : "Sua lista de tarefas está zerada! 🎉";
+            aiResponse.reply = list.length > 0 ? `✅ Suas Tarefas:\n` + list.map(t => `• ${t.title}`).join("\n") : "Sua lista de tarefas está zerada! 🎉";
           }
         } else if (action === "DONE") {
           const task = await prisma.task.findFirst({ where: { user_id: user.id, completed: false, title: { contains: parsedData.title || "", mode: 'insensitive' } } });
@@ -321,7 +323,7 @@ const server = http.createServer(async (req, res) => {
               headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
               body: JSON.stringify({ 
                 number: phone, 
-                text: "Opa! Recebi a confirmação do seu pagamento. ✅ \n\nSeu acesso ao *Assessor Nico* agora é ILIMITADO! 🎉 \n\nJá pode começar a organizar suas finanças e tarefas sem restrições. Como posso ser útil agora? 📈🚀" 
+                text: "Opa! Recebi a confirmação do seu pagamento. ✅ \n\nSeu acesso ao Assessor Nico agora é ILIMITADO! 🎉 \n\nJá pode começar a organizar suas finanças e tarefas sem restrições. Como posso ser útil agora? 📈🚀" 
               })
             }).catch(e => console.error("Erro ao enviar confirmação WhatsApp:", e.message));
           }
