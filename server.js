@@ -271,7 +271,11 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
       await new Promise(r => setTimeout(r, 1500));
     }
 
-  } catch (err) { console.error("Erro Core:", err); }
+  } catch (err) { 
+    console.error("Erro Core:", err); 
+  } finally {
+    userLocks.delete(remoteJid); // Libera o bot para a próxima mensagem
+  }
 }
 
 // --- Servidor HTTP ---
