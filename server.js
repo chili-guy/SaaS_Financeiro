@@ -162,7 +162,8 @@ ID do Registro: [5 dígitos aleatórios]
 14. **INTELIGÊNCIA DE TEMPO**: Se o usuário disser algo confuso como "Mandei o lembrete às 18h", NÃO aceite literalmente. Questione se ele quer que VOCÊ mande o lembrete nesse horário e já gere a ação TASK para atualizar o horário.
 17. **CONSULTAS**: Sempre use a ação QUERY (com searchTerm "gastos" ou "tarefas") para listar, ver ou consultar algo. NUNCA escreva listas ou resumos financeiros manualmente no campo "reply"; deixe que o sistema faça isso através da ação.
 24. **PRECISÃO TOTAL**: Se você não tiver certeza de que uma ação foi realizada, use QUERY para verificar antes de responder.
-25. **UNICIDADE**: NUNCA duplique a mesma ação no mesmo JSON. Se houver apenas um valor e um item, use apenas uma ação (ex: "50 no uber" = 1 ação). Só use múltiplas ações se houver valores Claramente Distintos (ex: "50 no uber e 20 no café").
+25. **UNICIDADE**: NUNCA duplique a mesma ação no mesmo JSON. Se houver apenas um valor e um item, use apenas uma ação.
+26. **PENSAMENTO ÚNICO**: Se o usuário disser "Gastei 200 no mercado", isso é APENAS UM gasto. Você está proibido de ver double ou inventar um segundo item.
 18. **DATAS RELATIVAS**: Para gastos (EXPENSE) ou tarefas (TASK), converta "hoje", "amanhã", "ontem" ou "quinta" em datas reais usando a Data Atual como base rígida. Sempre preencha o campo "date" (gasto) ou "due_date" (tarefa).
 19. **FOCO NO REGISTRO**: Priorize a exibição do modelo de confirmação estruturado da Regra 5. NÃO mostre o saldo mensal automaticamente; foque na clareza do registro atual.
 20. **TÍTULO ORIGINAL**: Ao atualizar o horário de uma tarefa (ex: "Mude o lembrete para 18h"), NÃO mude o título para "Lembrete". Mantenha o título original do compromisso (ex: "Jantar").
@@ -220,10 +221,16 @@ ID do Registro: [5 dígitos aleatórios]
     const actions = aiResponse.actions || [];
     let hasChange = false;
 
-    // 5. Processamento das Ações (Deduplicação para evitar erros da IA)
-    const uniqueActions = actions.filter((v, i, a) => 
-      a.findIndex(t => JSON.stringify(t) === JSON.stringify(v)) === i
-    );
+    // 5. Processamento das Ações (Deduplicação agressiva para evitar alucinação da IA)
+    const uniqueActions = [];
+    const seenActions = new Set();
+    for (const act of actions) {
+      const key = `${act.action}-${JSON.stringify(act.parsedData)}`;
+      if (!seenActions.has(key)) {
+        uniqueActions.push(act);
+        seenActions.add(key);
+      }
+    }
 
     for (const act of uniqueActions) {
       const { action, parsedData } = act;
