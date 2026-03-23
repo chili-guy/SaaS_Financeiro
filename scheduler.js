@@ -31,15 +31,16 @@ async function checkReminders() {
                 const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${INSTANCE}`;
 
                 // --- LÓGICA 1: Notificação de 15 MINUTOS ANTES ---
-                // Se NÃO for curto prazo E já faltar 15 min (ou menos) E não avisou antes E ainda não chegou no horário real
                 if (!isShortTermTask && !task.notified_5min && now < dueDate) {
                     console.log(`[Scheduler] Aviso de 15 min para ${cleanNumber}: ${task.title}`);
                     const text = `⏳ *FALTAM 15 MINUTOS!* \n\nOlá! Passo pra te lembrar que seu compromisso: \n*"${task.title}"*\ncomeça em breve! 🔔`;
-                    const btnSuccess = await sendEvolutionButtons(cleanNumber, text, INSTANCE, [
+                    
+                    // Garante entrega via texto primeiro
+                    await sendText(cleanNumber, text, INSTANCE);
+                    // Tenta botões como extra
+                    await sendEvolutionButtons(cleanNumber, "Opções:", INSTANCE, [
                         { id: "confirm_task", text: "Ver Agenda 📅" }
                     ]);
-
-                    if (!btnSuccess) await sendText(cleanNumber, text, INSTANCE);
 
                     await prisma.task.update({
                         where: { id: task.id },
@@ -48,16 +49,17 @@ async function checkReminders() {
                 }
 
                 // --- LÓGICA 2: Notificação NO HORÁRIO (Real Time) ---
-                // Se chegou o horário (agora ou passou) e NÃO foi mandado o aviso final ainda
                 if (now >= dueDate && !task.notified) {
                     console.log(`[Scheduler] Aviso NO HORÁRIO para ${cleanNumber}: ${task.title}`);
                     const text = `🔔 *HORA DO LEMBRETE!* \n\nOi! Chegou o horário de: \n*"${task.title}"*\n\nJá conseguiu concluir? Basta me avisar! 😊`;
-                    const btnSuccess = await sendEvolutionButtons(cleanNumber, text, INSTANCE, [
+                    
+                    // Garante entrega via texto primeiro
+                    await sendText(cleanNumber, text, INSTANCE);
+                    // Tenta botões como extra
+                    await sendEvolutionButtons(cleanNumber, "Opções:", INSTANCE, [
                         { id: "confirm_task", text: "Ver Agenda 📅" },
                         { id: "done_last", text: "Concluir Agora ✅" }
                     ]);
-
-                    if (!btnSuccess) await sendText(cleanNumber, text, INSTANCE);
 
                     await prisma.task.update({
                         where: { id: task.id },
@@ -77,14 +79,32 @@ setInterval(checkReminders, 60000);
 
 async function sendText(number, text, instance) {
     const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${instance}`;
-    return fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
-        body: JSON.stringify({ number, text })
-    }).catch(e => console.error("Erro sendText Scheduler:", e.message));
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    try {
+        const res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
+            body: JSON.stringify({ number, text }),
+            signal: controller.signal
+        });
+        if (res.ok) {
+            console.log(`[Scheduler] ✅ Texto enviado para ${number}`);
+        } else {
+            console.error(`[Scheduler] ❌ Erro texto (${res.status}) para ${number}`);
+        }
+    } catch (e) {
+        console.error("❌ Erro sendText Scheduler:", e.message);
+    } finally {
+        clearTimeout(timeoutId);
+    }
 }
 
 async function sendEvolutionButtons(number, text, instance, buttons) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     try {
         const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendButtons/${instance}`;
         const formattedButtons = buttons.map(b => ({
@@ -102,17 +122,22 @@ async function sendEvolutionButtons(number, text, instance, buttons) {
                 description: text,
                 footer: "Toque em um botão para agir",
                 buttons: formattedButtons
-            })
+            }),
+            signal: controller.signal
         });
 
-        if (!response.ok) {
+        if (response.ok) {
+            console.log(`[Scheduler] ✅ Botões enviados para ${number}`);
+            return true;
+        } else {
             const errData = await response.text();
-            console.error(`[Scheduler] Erro botões (${response.status}):`, errData);
+            console.error(`[Scheduler] ❌ Erro botões (${response.status}) para ${number}:`, errData);
             return false;
         }
-        return true;
     } catch (e) {
-        console.error("Erro sendButtons Scheduler:", e.message);
+        console.error("❌ Erro sendButtons Scheduler:", e.message);
         return false;
+    } finally {
+        clearTimeout(timeoutId);
     }
 }
