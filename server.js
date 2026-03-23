@@ -157,6 +157,7 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
 18. **DATAS RELATIVAS**: Para gastos (EXPENSE) ou tarefas (TASK), converta "hoje", "amanhã", "ontem" ou "quinta" em datas reais usando a Data Atual como base rígida. Sempre preencha o campo "date" (gasto) ou "due_date" (tarefa).
 19. **SALDO ZERO**: NUNCA mostre o saldo, total de gastos ou relatórios financeiros se não for perguntado explicitamente ("Quanto gastei?", "Qual meu saldo?"). Responda apenas "Registrado! ✅" ou similar.
 20. **TÍTULO ORIGINAL**: Ao atualizar o horário de uma tarefa (ex: "Mude o lembrete para 18h"), NÃO mude o título para "Lembrete". Mantenha o título original do compromisso (ex: "Jantar").
+21. **SINÔNIMOS**: Entenda "dívidas", "contas", "boletos" como sinônimos de gastos (EXPENSE) na hora de listar ou reportar.
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
@@ -260,7 +261,7 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
           console.log(`[${remoteJid}] 🔎 Buscando informações históricas...`);
           const term = (parsedData.searchTerm || "").toLowerCase().trim();
           
-          if (!term || ["gastos", "despesas", "receitas", "ganhos", "saldo", "total", "balanço", "relatório"].some(k => term.includes(k))) {
+          if (!term || ["gastos", "despesas", "receitas", "ganhos", "saldo", "total", "balanço", "relatório", "dividas", "dívidas", "contas", "boletos"].some(k => term.includes(k))) {
             const dateFilter = term.includes("mês passado") ? { gte: new Date(now.getFullYear(), now.getMonth() - 1, 1), lt: new Date(now.getFullYear(), now.getMonth(), 1) } : { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
             const eSum = await prisma.expense.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
             const iSum = await prisma.income.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
