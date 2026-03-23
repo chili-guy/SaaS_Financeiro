@@ -73,9 +73,9 @@ async function checkReminders() {
     }
 }
 
-// Roda a cada 1 minuto
-console.log("🚀 [Scheduler] Iniciado! Verificando lembretes a cada 60s.");
-setInterval(checkReminders, 60000);
+// Roda a cada 25 segundos para maior precisão
+console.log("🚀 [Scheduler] Iniciado! Verificando lembretes a cada 25s.");
+setInterval(checkReminders, 25000);
 
 async function sendText(number, text, instance) {
     const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${instance}`;
