@@ -23,6 +23,7 @@ const APP_URL              = process.env.APP_URL || "http://localhost:3000";
 
 // --- Buffer de Mensagens (QA: Debounce para evitar múltiplas notificações) ---
 const messageBuffers = new Map();
+const processedIds   = new Set(); // Cache para evitar mensagens duplicadas (re-entregas)
 const DEBOUNCE_TIME = 2500; // Aguarda 2.5s antes de processar
 
 /**
@@ -74,10 +75,13 @@ async function processNicoCore(remoteJid, msgText, instance) {
     const expenses     = await prisma.expense.findMany({ where: { user_id: user.id }, orderBy: { date: 'desc' }, take: 5 });
 
     const myTasksStr = pendingTasks.length > 0 
-      ? pendingTasks.map(t => `${t.title}${t.due_date ? ` (para ${t.due_date.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })})` : ""}`).join(", ") 
+      ? pendingTasks.map(t => `- ${t.title}${t.due_date ? ` [DATA: ${t.due_date.toISOString()}]` : " [SEM DATA]"}`).join("\n") 
       : "Nenhuma pendente";
+
     const myExpStr   = expenses.length > 0 ? expenses.map(e => `R$${e.amount} (${e.description})`).join(", ") : "Nenhum gasto recente";
     const dataAtual  = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+    console.log(`[AI Context] User: ${user.phone_number} | Tasks: ${myTasksStr}`);
 
     const msgCount  = await prisma.message.count({ where: { user_id: user.id } });
     const isFirst   = msgCount <= 1;
@@ -333,7 +337,13 @@ const server = http.createServer(async (req, res) => {
 
         const dataKey = payload.data?.key || payload.data?.message?.key || {};
         const remoteJid = dataKey.remoteJid || "";
+        const msgId     = dataKey.id || "";
+
         if (dataKey.fromMe || !remoteJid || remoteJid.includes("@g.us")) return end200();
+        if (processedIds.has(msgId)) return end200(); // Ignora duplicatas
+        
+        processedIds.add(msgId);
+        setTimeout(() => processedIds.delete(msgId), 60000); // Limpa o ID após 1 min
 
         const msgNode = payload.data?.message || payload.data;
         const msgText = msgNode.conversation || msgNode.extendedTextMessage?.text || msgNode.imageMessage?.caption || "";
