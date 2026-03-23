@@ -23,13 +23,20 @@ const APP_URL              = process.env.APP_URL || "http://localhost:3000";
 
 // --- Buffer de Mensagens (QA: Debounce para evitar múltiplas notificações) ---
 const messageBuffers = new Map();
-const processedIds   = new Set(); // Cache para evitar mensagens duplicadas (re-entregas)
-const DEBOUNCE_TIME = 3500; // Aguarda 3.5s para agrupar mensagens rápidas
+const processedIds   = new Set(); 
+const userLocks      = new Set(); // Trava de processamento por usuário
+const DEBOUNCE_TIME  = 2500; 
 
 /**
  * Motor Central de Inteligência do Nico
  */
 async function processNicoCore(remoteJid, msgText, instance) {
+  if (userLocks.has(remoteJid)) {
+    console.log(`[${remoteJid}] 🔒 Usuário já está sendo processado. Ignorando concorrência.`);
+    return;
+  }
+  userLocks.add(remoteJid);
+
   try {
     // 1. Controle de Assinante (SaaS com Trial de 14 dias)
     let user = await prisma.user.findUnique({ where: { phone_number: remoteJid } });
