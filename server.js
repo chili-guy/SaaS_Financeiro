@@ -220,11 +220,16 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
     const actions = aiResponse.actions || [];
     let hasChange = false;
 
-    // 5. Processamento das Ações (Deduplicação agressiva para evitar alucinação da IA)
+    // 5. Processamento das Ações (Deduplicação agressiva e Case-Insensitive)
     const uniqueActions = [];
     const seenActions = new Set();
     for (const act of actions) {
-      const key = `${act.action}-${JSON.stringify(act.parsedData)}`;
+      // Normalizamos a chave para evitar duplicidade por causa de maiúsculas/minúsculas ou espaços
+      const cleanData = JSON.parse(JSON.stringify(act.parsedData));
+      if (cleanData.description) cleanData.description = cleanData.description.toLowerCase().trim();
+      if (cleanData.title) cleanData.title = cleanData.title.toLowerCase().trim();
+      
+      const key = `${act.action}-${JSON.stringify(cleanData)}`;
       if (!seenActions.has(key)) {
         uniqueActions.push(act);
         seenActions.add(key);
@@ -337,14 +342,29 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
             console.log(`[${remoteJid}] ✅ Tarefa concluída: ${task.title}`);
           }
         } else if (action === "CLEANUP") {
+          console.log(`[${remoteJid}] 🧹 Iniciando limpeza geral de duplicatas...`);
+          
+          // 1. Limpeza de Tarefas
           const tasks = await prisma.task.findMany({ where: { user_id: user.id, completed: false } });
-          const seen = new Set();
-          let removed = 0;
+          const seenT = new Set();
+          let remT = 0;
           for (const t of tasks) {
-            const nt = t.title.toLowerCase().trim();
-            if (seen.has(nt)) { await prisma.task.delete({ where: { id: t.id } }); removed++; } else { seen.add(nt); }
+            const k = t.title.toLowerCase().trim();
+            if (seenT.has(k)) { await prisma.task.delete({ where: { id: t.id } }); remT++; } else { seenT.add(k); }
           }
-          console.log(`[${remoteJid}] ✨ Limpeza de duplicatas: ${removed} removidos.`);
+
+          // 2. Limpeza de Gastos (Mesmo valor, descrição e dia)
+          const exps = await prisma.expense.findMany({ where: { user_id: user.id } });
+          const seenE = new Set();
+          let remE = 0;
+          for (const e of exps) {
+            const dateKey = e.date.toISOString().split('T')[0];
+            const k = `${e.amount}-${e.description.toLowerCase().trim()}-${dateKey}`;
+            if (seenE.has(k)) { await prisma.expense.delete({ where: { id: e.id } }); remE++; } else { seenE.add(k); }
+          }
+          
+          aiResponse.reply = `✨ *Limpeza concluída!* \n\nRemovi ${remT} tarefas duplicadas e ${remE} registros financeiros repetidos do seu histórico. ✅`;
+          console.log(`[${remoteJid}] ✨ Limpeza concluída: ${remT} tarefas, ${remE} gastos.`);
         } else if (action === "DELETE") {
           const s = (parsedData.title || "").toLowerCase();
           const cleanTasks = s.includes("tarefa") || s.includes("agenda");
