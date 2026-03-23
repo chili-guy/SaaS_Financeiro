@@ -125,7 +125,7 @@ async function processNicoCore(remoteJid, msgText, instance) {
 
     // 3. System Prompt (Instruções de Identidade e Regras)
     const sysPrompt = `### IDENTIDADE
-Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuário. Seu tom é prático, inteligente e direto. Você é um parceiro estratégico.
+Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dívidas", "Contas" e "Gastos" são a mesma coisa. Você é um parceiro que simplifica a vida financeira do usuário.
 
 ### CONTEXTO ATUAL (VERDADE ABSOLUTA)
 - Data/Hora: ${dataAtual}
@@ -133,10 +133,10 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
 - Usuário: ${user.name && user.name !== "Nico User" ? user.name : "Investidor"}
 
 ### REGISTROS INTERNOS (PARA SEU CONHECIMENTO):
-- Saldo Mensal (Este Mês): R$ ${balance.toFixed(2)} (Receitas: R$ ${totalInc.toFixed(2)} | Gastos/Dívidas: R$ ${totalExp.toFixed(2)})
-- Tarefas Pendentes: ${myTasksStr}
-- Movimentações Recentes (Gastos/Dívidas): ${myExpStr}
-- Movimentações Recentes (Receitas): ${myIncStr}
+- Financeiro (Este Mês): R$ ${balance.toFixed(2)} (Receitas: R$ ${totalInc.toFixed(2)} | Gastos/Dívidas: R$ ${totalExp.toFixed(2)})
+- Agenda de Tarefas: ${myTasksStr}
+- Histórico de Dívidas/Gastos: ${myExpStr}
+- Histórico de Receitas: ${myIncStr}
 
 ### REGRAS DE COMPORTAMENTO (ESTRITAS):
 1. **SAUDAÇÃO ÚNICA**: Se o histórico recente já mostra um "Olá", pule a saudação. Vá direto ao ponto.
@@ -157,7 +157,7 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
 18. **DATAS RELATIVAS**: Para gastos (EXPENSE) ou tarefas (TASK), converta "hoje", "amanhã", "ontem" ou "quinta" em datas reais usando a Data Atual como base rígida. Sempre preencha o campo "date" (gasto) ou "due_date" (tarefa).
 19. **SALDO ZERO**: NUNCA mostre o saldo, total de gastos ou relatórios financeiros se não for perguntado explicitamente ("Quanto gastei?", "Qual meu saldo?"). Responda apenas "Registrado! ✅" ou similar.
 20. **TÍTULO ORIGINAL**: Ao atualizar o horário de uma tarefa (ex: "Mude o lembrete para 18h"), NÃO mude o título para "Lembrete". Mantenha o título original do compromisso (ex: "Jantar").
-21. **SINÔNIMOS**: Entenda "dívidas", "contas", "boletos", "debito", "pendencias" como sinônimos de gastos (EXPENSE).
+21. **MAPEAMENTO DE TERMOS**: "Dívidas", "Contas", "Débitos" e "Boletos" são GASTOS (EXPENSE). Se o usuário pedir para listar dívidas, você deve listar os gastos (QUERY gastos). NUNCA diga que não encontrou se houver gastos registrados.
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
@@ -262,13 +262,23 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
           const term = (parsedData.searchTerm || "").toLowerCase().trim();
           
           const k = ["gastos", "despesas", "receitas", "ganhos", "saldo", "total", "balanço", "relatório", "dividas", "dívidas", "contas", "boletos", "debito", "débito", "pendencias", "pendências", "financeiro", "extrato", "liste", "quais", "ver", "com"];
+          
           if (!term || k.some(key => term.includes(key))) {
             const dateFilter = term.includes("mês passado") ? { gte: new Date(now.getFullYear(), now.getMonth() - 1, 1), lt: new Date(now.getFullYear(), now.getMonth(), 1) } : { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
-            const eSum = await prisma.expense.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
-            const iSum = await prisma.income.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
-            const totalE = eSum._sum.amount || 0;
-            const totalI = iSum._sum.amount || 0;
-            aiResponse.reply = `📊 *Resumo ${term.includes("passado") ? "do Mês Passado" : "Mensal"}:*\n\n💰 Receitas: R$ ${totalI.toFixed(2)}\n💸 Gastos: R$ ${totalE.toFixed(2)}\n⚖️ Saldo: R$ ${(totalI - totalE).toFixed(2)}`;
+            
+            if (term.includes("gastos") || term.includes("divida") || term.includes("débito") || term.includes("contas")) {
+              const exps = await prisma.expense.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
+              aiResponse.reply = exps.length > 0 
+                ? `💸 *Seus Registros (Gastos/Dívidas):*\n\n` + exps.map(e => `• R$ ${e.amount.toFixed(2)} - ${e.description} (${e.category})`).join("\n")
+                : "Não encontrei registros de dívidas ou gastos para este período. 📂";
+            } else {
+              const eSum = await prisma.expense.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
+              const iSum = await prisma.income.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
+              const totalE = eSum._sum.amount || 0;
+              const totalI = iSum._sum.amount || 0;
+              aiResponse.reply = `📊 *Resumo ${term.includes("passado") ? "do Mês Passado" : "Mensal"}:*\n\n💰 Receitas: R$ ${totalI.toFixed(2)}\n💸 Gastos: R$ ${totalE.toFixed(2)}`;
+              // Removemos o saldo automático conforme pedido do usuário
+            }
           } else {
             const list = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, orderBy: { due_date: 'asc' } });
             aiResponse.reply = list.length > 0 ? `✅ Suas Tarefas:\n` + list.map(t => `• ${t.title}`).join("\n") : "Sua lista de tarefas está zerada! 🎉";
