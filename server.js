@@ -138,10 +138,11 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
 8. **CATEGORIZAÇÃO**: Atribua sempre uma categoria lógica aos gastos (EXPENSE).
 9. **SEM NEGRITOS**: Proibido usar "*" ou "**". Texto 100% limpo.
 10. **FOCO NO AGORA**: Só gere "actions" para o que foi pedido na mensagem ATUAL.
-11. **SEM REPETIÇÃO**: Se o usuário disser "Ok", "Valeu", "Entendido" ou similar, responda apenas com texto. NUNCA gere actions para mensagens de confirmação.
-12. **COMANDO DELETE (SELETIVO)**: Se o usuário pedir para limpar tarefas, use DELETE com title "tarefas". Se for financeiro, use "financeiro". Se for tudo, use "tudo".
-13. **REGRA DO HORÁRIO**: SÓ defina "due_date" em uma TASK se o usuário mencionar um horário ou data específica.
-14. **ZERO HALLUCINATION**: Se houver itens nos registros internos, você DEVE reconhecê-los.
+11. **SEM REPETIÇÃO**: Se o usuário disser "Ok", "Valeu" ou similar, responda apenas com texto.
+12. **COMANDO DELETE**: Se o usuário pedir para limpar tarefas, use DELETE com title "tarefas". Se for financeiro, use "financeiro".
+13. **REMARCAR (UPDATE)**: Se o usuário quiser mudar o horário de uma tarefa já mencionada, use a ação TASK com o mesmo título e o novo "due_date".
+14. **INTELIGÊNCIA DE TEMPO**: Se o usuário disser algo confuso como "Mandei o lembrete às 18h", NÃO aceite literalmente. Questione se ele quer que VOCÊ mande o lembrete nesse horário e já gere a ação TASK para atualizar o horário.
+15. **LEMBRETES**: Informe que você avisa 15min antes e também no horário exato.
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
@@ -212,8 +213,13 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
           const existing = await prisma.task.findFirst({ where: { user_id: user.id, completed: false, title: { contains: parsedData.title, mode: 'insensitive' } } });
           const finalDueDate = parsedData.due_date ? new Date(String(parsedData.due_date).replace(/Z$/i, "")) : null;
           if (existing) {
-            await prisma.task.update({ where: { id: existing.id }, data: { due_date: finalDueDate || existing.due_date } });
+            console.log(`[${remoteJid}] ⏳ ATUALIZANDO TAREFA: "${existing.title}" para ${finalDueDate}...`);
+            await prisma.task.update({ 
+              where: { id: existing.id }, 
+              data: { due_date: finalDueDate || existing.due_date, notified: false, notified_5min: false } 
+            });
           } else {
+            console.log(`[${remoteJid}] 📝 CRIANDO TAREFA: "${parsedData.title}" para ${finalDueDate}...`);
             await prisma.task.create({ data: { user_id: user.id, title: parsedData.title, due_date: finalDueDate } });
           }
           hasChange = true;
