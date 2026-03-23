@@ -73,7 +73,9 @@ async function processNicoCore(remoteJid, msgText, instance) {
     const pendingTasks = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, take: 15 });
     const expenses     = await prisma.expense.findMany({ where: { user_id: user.id }, orderBy: { date: 'desc' }, take: 5 });
 
-    const myTasksStr = pendingTasks.length > 0 ? pendingTasks.map(t => t.title).join(", ") : "Nenhuma pendente";
+    const myTasksStr = pendingTasks.length > 0 
+      ? pendingTasks.map(t => `${t.title}${t.due_date ? ` (para ${t.due_date.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })})` : ""}`).join(", ") 
+      : "Nenhuma pendente";
     const myExpStr   = expenses.length > 0 ? expenses.map(e => `R$${e.amount} (${e.description})`).join(", ") : "Nenhum gasto recente";
     const dataAtual  = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
