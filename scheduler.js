@@ -88,9 +88,9 @@ async function sendEvolutionButtons(number, text, instance, buttons) {
     try {
         const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendButtons/${instance}`;
         const formattedButtons = buttons.map(b => ({
-            buttonId: b.id,
-            buttonText: { displayText: b.text },
-            type: 1
+            type: "reply",
+            displayText: b.text,
+            id: b.id
         }));
 
         const response = await fetch(endpoint, {
