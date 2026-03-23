@@ -1,9 +1,10 @@
 process.env.TZ = "America/Sao_Paulo";
 import { PrismaClient } from "@prisma/client";
+import 'dotenv/config';
 const prisma = new PrismaClient();
 
-const EVO_URL = process.env.EVOLUTION_API_URL || "http://evolution-api:8080";
-const EVO_KEY = process.env.EVOLUTION_API_KEY || "FInAgentAPISecretKey_2026";
+const EVO_URL  = process.env.EVOLUTION_API_URL || "http://127.0.0.1:8080";
+const EVO_KEY  = process.env.EVOLUTION_API_KEY || "FInAgentAPISecretKey_2026";
 const INSTANCE = process.env.INSTANCE || "main";
 
 async function checkReminders() {
@@ -33,12 +34,12 @@ async function checkReminders() {
                 // --- LÓGICA 1: Notificação de 15 MINUTOS ANTES ---
                 if (!isShortTermTask && !task.notified_5min && now < dueDate) {
                     console.log(`[Scheduler] Aviso de 15 min para ${cleanNumber}: ${task.title}`);
-                    const text = `⏳ *FALTAM 15 MINUTOS!* \n\nOlá! Passo pra te lembrar que seu compromisso: \n*"${task.title}"*\ncomeça em breve! 🔔`;
+                    const fullRecipient = cleanNumber + "@s.whatsapp.net";
                     
                     // Garante entrega via texto primeiro
-                    await sendText(cleanNumber, text, INSTANCE);
+                    await sendText(fullRecipient, text, INSTANCE);
                     // Tenta botões como extra
-                    await sendEvolutionButtons(cleanNumber, "Opções:", INSTANCE, [
+                    await sendEvolutionButtons(fullRecipient, "Opções:", INSTANCE, [
                         { id: "confirm_task", text: "Ver Agenda 📅" }
                     ]);
 
@@ -51,12 +52,12 @@ async function checkReminders() {
                 // --- LÓGICA 2: Notificação NO HORÁRIO (Real Time) ---
                 if (now >= dueDate && !task.notified) {
                     console.log(`[Scheduler] Aviso NO HORÁRIO para ${cleanNumber}: ${task.title}`);
-                    const text = `🔔 *HORA DO LEMBRETE!* \n\nOi! Chegou o horário de: \n*"${task.title}"*\n\nJá conseguiu concluir? Basta me avisar! 😊`;
+                    const fullRecipient = cleanNumber + "@s.whatsapp.net";
                     
                     // Garante entrega via texto primeiro
-                    await sendText(cleanNumber, text, INSTANCE);
+                    await sendText(fullRecipient, text, INSTANCE);
                     // Tenta botões como extra
-                    await sendEvolutionButtons(cleanNumber, "Opções:", INSTANCE, [
+                    await sendEvolutionButtons(fullRecipient, "Opções:", INSTANCE, [
                         { id: "confirm_task", text: "Ver Agenda 📅" },
                         { id: "done_last", text: "Concluir Agora ✅" }
                     ]);
@@ -83,6 +84,7 @@ async function sendText(number, text, instance) {
     const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     try {
+        console.log(`[Scheduler] 📤 Enviando texto para ${number}...`);
         const res = await fetch(endpoint, {
             method: "POST",
             headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
@@ -90,9 +92,10 @@ async function sendText(number, text, instance) {
             signal: controller.signal
         });
         if (res.ok) {
-            console.log(`[Scheduler] ✅ Texto enviado para ${number}`);
+            console.log(`[Scheduler] ✅ Mensagem enviada para ${number}`);
         } else {
-            console.error(`[Scheduler] ❌ Erro texto (${res.status}) para ${number}`);
+            const err = await res.text();
+            console.error(`[Scheduler] ❌ Erro na API (${res.status}):`, err);
         }
     } catch (e) {
         console.error("❌ Erro sendText Scheduler:", e.message);
@@ -106,6 +109,7 @@ async function sendEvolutionButtons(number, text, instance, buttons) {
     const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     try {
+        console.log(`[Scheduler] 📤 Enviando botões para ${number}...`);
         const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendButtons/${instance}`;
         const formattedButtons = buttons.map(b => ({
             type: "reply",
