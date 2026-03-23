@@ -189,8 +189,9 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
         } else if (action === "QUERY") {
           console.log(`[${remoteJid}] 🔎 Buscando informações...`);
           const term = (parsedData.searchTerm || "").toLowerCase().trim();
-          const isGeneric = !term || ["lista", "tarefas", "resumo", "tudo", "gastos"].some(k => term.includes(k));
-          if (isGeneric) {
+          // Busca ampliada: se perguntar qualquer coisa sobre tarefas ou compromissos, mostra a lista.
+          const isTaskQuery = !term || ["tarefa", "agenda", "lista", "tudo", "hoje", "amanhã", "amanha", "fazer", "pendente", "atividade"].some(k => term.includes(k));
+          if (isTaskQuery) {
             const list = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, orderBy: { due_date: 'asc' } });
             aiResponse.reply = list.length > 0 ? `✅ Suas Tarefas:\n` + list.map(t => `• ${t.title}`).join("\n") : "Sua lista de tarefas está zerada! 🎉";
           }
@@ -245,7 +246,7 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
     }
 
     // 6. Resposta Final
-    const finalReply = String(aiResponse.reply || (hasChange ? "Tudo pronto! ✅" : "Entendido! 👍")).trim();
+    const finalReply = String(aiResponse.reply || (hasChange ? "Tudo certo! ✅" : "Entendido.")).trim();
     await prisma.message.create({ data: { user_id: user.id, role: "assistant", content: finalReply } });
 
     // 6. Enviar em blocos (fatiado por \n\n) para naturalidade
