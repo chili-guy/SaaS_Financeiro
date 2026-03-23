@@ -138,10 +138,10 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
 8. **CATEGORIZAÇÃO**: Atribua sempre uma categoria lógica aos gastos (EXPENSE).
 9. **SEM NEGRITOS**: Proibido usar "*" ou "**". Texto 100% limpo.
 10. **FOCO NO AGORA**: Só gere "actions" para o que foi pedido na mensagem ATUAL.
-11. **COMANDO DELETE (CRÍTICO)**: Se o usuário pedir para "limpar", "apagar", "zerar" ou "resetar" (seja tarefas ou gastos), você DEVE obrigatoriamente incluir a action "DELETE" com parsedData.title igual a "tudo" (se for tudo) ou o termo específico. Nunca apenas responda em texto que limpou sem mandar a action.
-12. **REGRA DO HORÁRIO (CRÍTICA)**: SÓ defina "due_date" em uma TASK se o usuário mencionar um horário ou data específica.
-13. **ZERO HALLUCINATION**: Se o campo "REGISTROS INTERNOS" acima contiver tarefas ou gastos, e o usuário perguntar o que tem lá, você DEVE listar o que está lá. NUNCA diga que a lista está vazia se houver itens nos registros internos.
-14. **DISCRIÇÃO TOTAL**: Fale como um humano. Se perguntarem pelos dados, diga que você os tem anotados.
+11. **SEM REPETIÇÃO**: Se o usuário disser "Ok", "Valeu", "Entendido" ou similar, responda apenas com texto. NUNCA gere actions para mensagens de confirmação.
+12. **COMANDO DELETE (SELETIVO)**: Se o usuário pedir para limpar tarefas, use DELETE com title "tarefas". Se for financeiro, use "financeiro". Se for tudo, use "tudo".
+13. **REGRA DO HORÁRIO**: SÓ defina "due_date" em uma TASK se o usuário mencionar um horário ou data específica.
+14. **ZERO HALLUCINATION**: Se houver itens nos registros internos, você DEVE reconhecê-los.
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
@@ -262,19 +262,27 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
           console.log(`[${remoteJid}] ✨ Limpeza de duplicatas: ${removed} removidos.`);
         } else if (action === "DELETE") {
           const s = (parsedData.title || "").toLowerCase();
-          const isFullCleanup = s.includes("tudo") || s.includes("todas") || s.includes("toda") || 
-                                s.includes("lista") || s.includes("agenda") || s.includes("histórico") ||
-                                s.includes("limpar") || s.includes("apagar") || s.includes("zerar") ||
-                                s.includes("registros") || s === "tarefas" || s === "gastos";
+          const cleanTasks = s.includes("tarefa") || s.includes("agenda");
+          const cleanFinance = s.includes("gasto") || s.includes("despesa") || s.includes("receita") || s.includes("ganho") || s.includes("financeiro");
+          const cleanAll = s.includes("tudo") || s.includes("histórico") || (!cleanTasks && !cleanFinance && (s.includes("limpar") || s.includes("apagar")));
 
-          if (isFullCleanup) {
-            console.log(`[${remoteJid}] 🗑️ LIMPANDO TUDO (Tasks + Expenses + Incomes)...`);
-            const dt = await prisma.task.deleteMany({ where: { user_id: user.id } });
-            const de = await prisma.expense.deleteMany({ where: { user_id: user.id } });
-            const di = await prisma.income.deleteMany({ where: { user_id: user.id } });
-            aiResponse.reply = `🗑️ *TUDO LIMPO!* \n\nAcabei de remover suas ${dt.count} tarefas e registros financeiros. Estamos prontos para um novo começo! ✨`;
+          if (cleanAll) {
+            console.log(`[${remoteJid}] 🗑️ RESET TOTAL...`);
+            await prisma.task.deleteMany({ where: { user_id: user.id } });
+            await prisma.expense.deleteMany({ where: { user_id: user.id } });
+            await prisma.income.deleteMany({ where: { user_id: user.id } });
+            aiResponse.reply = `🗑️ *RESET COMPLETO!* \n\nRemovi todas as suas tarefas e registros financeiros. ✨`;
+          } else if (cleanTasks) {
+            console.log(`[${remoteJid}] 🗑️ LIMPANDO TAREFAS...`);
+            const count = await prisma.task.deleteMany({ where: { user_id: user.id } });
+            aiResponse.reply = `🗑️ *TAREFAS LIMPAS!* \n\nRemovi suas ${count.count} tarefas da agenda. ✅`;
+          } else if (cleanFinance) {
+            console.log(`[${remoteJid}] 🗑️ LIMPANDO FINANCEIRO...`);
+            await prisma.expense.deleteMany({ where: { user_id: user.id } });
+            await prisma.income.deleteMany({ where: { user_id: user.id } });
+            aiResponse.reply = `🗑️ *FINANCEIRO LIMPO!* \n\nRemovi todos os seus registros de gastos e receitas. 💸`;
           } else {
-            console.log(`[${remoteJid}] 🗑️ Removendo itens específicos: "${s}"...`);
+            console.log(`[${remoteJid}] 🗑️ Removendo termo específico: "${s}"...`);
             const dt = await prisma.task.deleteMany({ where: { user_id: user.id, title: { contains: s, mode: 'insensitive' } } });
             const de = await prisma.expense.deleteMany({ where: { user_id: user.id, description: { contains: s, mode: 'insensitive' } } });
             aiResponse.reply = `🗑️ *Removido:* ${dt.count + de.count} itens contendo "${s}".`;
@@ -310,11 +318,16 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
       const hasTaskAction = actions.some(a => a.action === "TASK");
 
       if (isLastPart && hasTaskAction) {
-        // Envia a última parte com botões se houve criação de tarefa
-        await sendEvolutionButtons(remoteJid, part, instanceName, [
+        // Tenta enviar botões, se falhar, envia como texto normal
+        const btnSuccess = await sendEvolutionButtons(remoteJid, part, instanceName, [
           { id: "confirm_task", text: "Ver Agenda 📅" },
           { id: "done_last", text: "Concluir Última ✅" }
         ]);
+        
+        if (!btnSuccess) {
+          console.log(`[${remoteJid}] ⚠️ Fallback: Enviando como texto pois botões falharam.`);
+          await sendText(remoteJid, part, instanceName);
+        }
       } else {
         await sendText(remoteJid, part, instanceName);
       }
@@ -339,24 +352,36 @@ async function sendText(number, text, instance) {
 }
 
 async function sendEvolutionButtons(number, text, instance, buttons) {
-  const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendButtons/${instance}`;
-  const formattedButtons = buttons.map(b => ({
-    buttonId: b.id,
-    buttonText: { displayText: b.text },
-    type: 1
-  }));
+  try {
+    const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendButtons/${instance}`;
+    const formattedButtons = buttons.map(b => ({
+      buttonId: b.id,
+      buttonText: { displayText: b.text },
+      type: 1
+    }));
 
-  return fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
-    body: JSON.stringify({
-      number,
-      title: "Assessor Nico",
-      description: text,
-      footer: "Toque em um botão para agir",
-      buttons: formattedButtons
-    })
-  }).catch(e => console.error("Erro sendButtons:", e.message));
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
+      body: JSON.stringify({
+        number,
+        title: "Assessor Nico",
+        description: text,
+        footer: "Toque em um botão para agir",
+        buttons: formattedButtons
+      })
+    });
+
+    if (!response.ok) {
+      const errData = await response.text();
+      console.error(`[Evolution API] Erro ao enviar botões (${response.status}):`, errData);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("Erro sendButtons:", e.message);
+    return false;
+  }
 }
 
 // --- Servidor HTTP ---
