@@ -158,6 +158,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 19. **SALDO ZERO**: NUNCA mostre o saldo, total de gastos ou relatórios financeiros se não for perguntado explicitamente ("Quanto gastei?", "Qual meu saldo?"). Responda apenas "Registrado! ✅" ou similar.
 20. **TÍTULO ORIGINAL**: Ao atualizar o horário de uma tarefa (ex: "Mude o lembrete para 18h"), NÃO mude o título para "Lembrete". Mantenha o título original do compromisso (ex: "Jantar").
 21. **MAPEAMENTO DE TERMOS**: "Dívidas", "Contas", "Débitos" e "Boletos" são GASTOS (EXPENSE). Se o usuário pedir para listar dívidas, você deve listar os gastos (QUERY gastos). NUNCA diga que não encontrou se houver gastos registrados.
+22. **AMBIGUIDADE**: Se o usuário for genérico demais (ex: "Gostaria de pagar", "Faça isso", "Ok"), NÃO execute ações (TASK, PAY, etc.) e pergunte exatamente o que ele quer fazer. Ex: "Você quer pagar uma dívida registrada ou assinar o Nico Assessor?".
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
@@ -165,7 +166,8 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
     { "action": "TASK", "parsedData": { "title": "string", "due_date": "ISO-DATE ou null" } },
     { "action": "EXPENSE", "parsedData": { "amount": float, "description": "string", "category": "string" } },
     { "action": "INCOME", "parsedData": { "amount": float, "description": "string", "category": "string" } },
-    { "action": "PAY", "parsedData": {} }
+    { "action": "PAY", "parsedData": { "title": "string" } },
+    { "action": "SUBSCRIBE", "parsedData": {} }
   ],
   "reply": "Sua resposta natural e humana aqui fatiada em bolhas por \\n\\n"
 }
@@ -262,20 +264,21 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
           const term = (parsedData.searchTerm || "").toLowerCase().trim();
           
           const isFinancial = ["gastos", "despesas", "receitas", "ganhos", "saldo", "total", "balanço", "relatório", "dividas", "dívidas", "contas", "boletos", "debito", "débito", "pendencias", "pendências", "financeiro", "extrato"].some(k => term.includes(k));
-          const isTask      = ["tarefa", "agenda", "compromisso", "lembrete", "marcado"].some(k => term.includes(k));
+          const isTask      = ["tarefa", "agenda", "compromisso", "lembrete", "marcado", "anota", "aviso"].some(k => term.includes(k));
           
-          if (isTask) {
+          // FORÇAR TAREFAS SE VIER "LISTE" SEM ESPECIFICAÇÃO FINANCEIRA
+          if (isTask || (term.includes("liste") && !isFinancial)) {
             const list = await prisma.task.findMany({ 
               where: { user_id: user.id, completed: false }, 
               orderBy: { due_date: 'asc' } 
             });
             aiResponse.reply = list.length > 0 
               ? `✅ *Sua Agenda de Tarefas:*\n\n` + list.map(t => {
-                  const dateStr = t.due_date ? new Date(t.due_date).toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }) : "[SEM DATA]";
-                  return `• ${t.title} ${dateStr}`;
+                  const dateStr = t.due_date ? new Date(t.due_date).toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" }) : "[SEM DATA]";
+                  return `• ${t.title} - ${dateStr}`;
                 }).join("\n") 
               : "Sua lista de tarefas está zerada! 🎉";
-          } else if (isFinancial || !term || term.includes("liste") || term.includes("quais") || term.includes("ver")) {
+          } else if (isFinancial || !term || term.includes("quais") || term.includes("ver")) {
             const dateFilter = term.includes("mês passado") ? { gte: new Date(now.getFullYear(), now.getMonth() - 1, 1), lt: new Date(now.getFullYear(), now.getMonth(), 1) } : { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
             
             if (term.includes("gastos") || term.includes("divida") || term.includes("débito") || term.includes("contas")) {
@@ -350,7 +353,10 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
           }
           hasChange = true;
         } else if (action === "PAY") {
-          console.log(`[${remoteJid}] 💳 Usuário solicitou checkout.`);
+          console.log(`[${remoteJid}] 💳 Ação PAY (Dívida) detectada.`);
+          // Apenas log de interesse, a IA deve perguntar qual dívida no "reply".
+        } else if (action === "SUBSCRIBE") {
+          console.log(`[${remoteJid}] 💰 Gerando Checkout Stripe...`);
           const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
