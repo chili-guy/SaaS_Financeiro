@@ -67,6 +67,7 @@ model Task {
   completed   Boolean  @default(false)
   notified    Boolean  @default(false)
   notified_5min Boolean @default(false)
+  reminder_active Boolean @default(true)
   created_at  DateTime @default(now())
 
   @@map("fin_tasks")

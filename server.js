@@ -153,10 +153,9 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
 12. **COMANDO DELETE**: Se o usuário pedir para limpar tarefas, use DELETE com title "tarefas". Se for financeiro, use "financeiro".
 13. **REMARCAR (UPDATE)**: Se o usuário quiser mudar o horário de uma tarefa já mencionada, use a ação TASK com o mesmo título e o novo "due_date".
 14. **INTELIGÊNCIA DE TEMPO**: Se o usuário disser algo confuso como "Mandei o lembrete às 18h", NÃO aceite literalmente. Questione se ele quer que VOCÊ mande o lembrete nesse horário e já gere a ação TASK para atualizar o horário.
-15. **LEMBRETES**: NÃO envie lembretes automáticos sem permissão. Sempre PERGUNTE se deve agendar um lembrete e INFORME que, se agendado, você avisará 15 minutos antes e na hora exata (ex: "Quer que eu agende um lembrete? Te aviso 15 min antes e na hora! Se sim, qual horário?").
-16. **TÍTULOS LIMPOS**: Use títulos curtos e nominais (ex: "Jantar" em vez de "Marcar jantar"). O sistema limpará os verbos automaticamente.
-17. **AGENDAMENTO**: Se o usuário mencionar uma nova tarefa com horário (ex: "Jantar 19h"), gere IMEDIATAMENTE a ação TASK com "due_date": null. Confirme que anotou o evento (ex: "Anotei o 'Role' para às 19h!") e, no mesmo turno, PERGUNTE se ele quer que você agende um lembrete (aviso 15 min antes e na hora). Só use um valor em "due_date" se ele disser "Sim", "Pode" ou "Me lembre". NUNCA responda apenas "Entendido" se houver uma tarefa para registrar.
-18. **SALDO E RELATÓRIOS**: NÃO mostre o saldo ou relatórios financeiros automaticamente após registrar um gasto (EXPENSE) ou receita (INCOME). Confirme apenas o registro e a categoria de forma direta. Só mostre o saldo se for solicitado (ex: "Quanto eu tenho?") ou se for um complemento que faça extremo sentido estratégico.
+17. **AGENDAMENTO**: Se o usuário mencionar um horário (ex: "Jantar 19h"), gere IMEDIATAMENTE a ação TASK incluindo esse horário. ANTES de salvar o lembrete ativo, PERGUNTE: "Anotei seu compromisso para às 19:00. Quer que eu agende o lembrete (te avisando 15 min antes e na hora)?". Se ele disser "Não", você deve enviar uma segunda ação TASK atualizando para "notified": true (isso salva o horário no banco mas silencia o alarme).
+18. **DATAS RELATIVAS**: Entenda "hoje", "amanhã", "segunda" etc., usando a Data Atual de referência. Sempre salve no banco a data correta no campo "due_date" da ação TASK.
+19. **SALDO E RELATÓRIOS**: NÃO mostre o saldo automaticamente. Registre e confirme diretamente.
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
@@ -227,15 +226,31 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
           const title = cleanTitle(parsedData.title);
           const existing = await prisma.task.findFirst({ where: { user_id: user.id, completed: false, title: { contains: title, mode: 'insensitive' } } });
           const finalDueDate = parsedData.due_date ? new Date(String(parsedData.due_date).replace(/Z$/i, "")) : null;
+          
+          // Permite que a IA silencie o lembrete enviando notified: true no JSON
+          const notifiedFlag = parsedData.notified === true; 
+          
           if (existing) {
             console.log(`[${remoteJid}] ⏳ ATUALIZANDO TAREFA: "${existing.title}" para ${finalDueDate}...`);
             await prisma.task.update({ 
               where: { id: existing.id }, 
-              data: { due_date: finalDueDate || existing.due_date, notified: false, notified_5min: false } 
+              data: { 
+                due_date: finalDueDate || existing.due_date, 
+                notified: notifiedFlag, 
+                notified_5min: notifiedFlag 
+              } 
             });
           } else {
             console.log(`[${remoteJid}] 📝 CRIANDO TAREFA: "${title}" para ${finalDueDate}...`);
-            await prisma.task.create({ data: { user_id: user.id, title: title, due_date: finalDueDate } });
+            await prisma.task.create({ 
+              data: { 
+                user_id: user.id, 
+                title: title, 
+                due_date: finalDueDate,
+                notified: notifiedFlag,
+                notified_5min: notifiedFlag
+              } 
+            });
           }
           hasChange = true;
         } else if (action === "QUERY") {
