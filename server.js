@@ -81,17 +81,32 @@ async function processNicoCore(remoteJid, msgText, instance) {
 
     const pendingTasks = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, take: 15 });
     const expenses     = await prisma.expense.findMany({ where: { user_id: user.id }, orderBy: { date: 'desc' }, take: 5 });
+    const incomes      = await prisma.income.findMany({ where: { user_id: user.id }, orderBy: { date: 'desc' }, take: 5 });
+
+    // Cálculo de Saldo Mensal (Mês Atual)
+    const firstDayMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthExpenses = await prisma.expense.aggregate({ where: { user_id: user.id, date: { gte: firstDayMonth } }, _sum: { amount: true } });
+    const monthIncomes  = await prisma.income.aggregate({ where: { user_id: user.id, date: { gte: firstDayMonth } }, _sum: { amount: true } });
+    
+    const totalExp = monthExpenses._sum.amount || 0;
+    const totalInc = monthIncomes._sum.amount || 0;
+    const balance  = totalInc - totalExp;
 
     const myTasksStr = pendingTasks.length > 0 
-      ? pendingTasks.map(t => `- ${t.title}${t.due_date ? ` [DATA: ${t.due_date.toISOString()}]` : " [SEM DATA]"}`).join("\n") 
+      ? pendingTasks.map(t => `- ${t.title}${t.due_date ? ` [DATA: ${t.due_date.toLocaleString("pt-BR", {timeZone: "America/Sao_Paulo"})}]` : " [SEM DATA]"}`).join("\n") 
       : "Nenhuma pendente";
 
     const myExpStr   = expenses.length > 0 
       ? expenses.map(e => `- R$${e.amount} em ${e.description} (${e.category}) [DATA: ${e.date.toISOString()}]`).join("\n") 
       : "Nenhum gasto recente";
+      
+    const myIncStr   = incomes.length > 0 
+      ? incomes.map(i => `- R$${i.amount} em ${i.description} (${i.category}) [DATA: ${i.date.toISOString()}]`).join("\n") 
+      : "Nenhuma receita recente";
+
     const dataAtual  = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
-    console.log(`[AI Context] User: ${user.phone_number} | Tasks: ${myTasksStr}`);
+    console.log(`[AI Context] User: ${user.phone_number} | Tasks: ${pendingTasks.length} | Balance: R$${balance}`);
 
     const msgCount  = await prisma.message.count({ where: { user_id: user.id } });
     const isFirst   = msgCount <= 1;
@@ -107,8 +122,10 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
 - Usuário: ${user.name && user.name !== "Nico User" ? user.name : "Investidor"}
 
 ### REGISTROS INTERNOS (PARA SEU CONHECIMENTO):
+- Saldo Mensal (Este Mês): R$ ${balance.toFixed(2)} (Receitas: R$ ${totalInc.toFixed(2)} | Gastos: R$ ${totalExp.toFixed(2)})
 - Tarefas Pendentes: ${myTasksStr}
-- Movimentações Recentes: ${myExpStr}
+- Movimentações Recentes (Gastos): ${myExpStr}
+- Movimentações Recentes (Receitas): ${myIncStr}
 
 ### REGRAS DE COMPORTAMENTO (ESTRITAS):
 1. **SAUDAÇÃO ÚNICA**: Se o histórico recente já mostra um "Olá", pule a saudação. Vá direto ao ponto.
@@ -130,6 +147,7 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
   "actions": [
     { "action": "TASK", "parsedData": { "title": "string", "due_date": "ISO-DATE ou null" } },
     { "action": "EXPENSE", "parsedData": { "amount": float, "description": "string", "category": "string" } },
+    { "action": "INCOME", "parsedData": { "amount": float, "description": "string", "category": "string" } },
     { "action": "PAY", "parsedData": {} }
   ],
   "reply": "Sua resposta natural e humana aqui fatiada em bolhas por \\n\\n"
@@ -199,13 +217,32 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
           }
           hasChange = true;
         } else if (action === "QUERY") {
-          console.log(`[${remoteJid}] 🔎 Buscando informações...`);
+          console.log(`[${remoteJid}] 🔎 Buscando informações históricas...`);
           const term = (parsedData.searchTerm || "").toLowerCase().trim();
-          // Busca ampliada: se perguntar qualquer coisa sobre tarefas ou compromissos, mostra a lista.
-          const isTaskQuery = !term || ["tarefa", "agenda", "lista", "tudo", "hoje", "amanhã", "amanha", "fazer", "pendente", "atividade"].some(k => term.includes(k));
-          if (isTaskQuery) {
+          
+          if (!term || ["gastos", "despesas", "receitas", "ganhos", "saldo", "total", "balanço", "relatório"].some(k => term.includes(k))) {
+            const dateFilter = term.includes("mês passado") ? { gte: new Date(now.getFullYear(), now.getMonth() - 1, 1), lt: new Date(now.getFullYear(), now.getMonth(), 1) } : { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
+            const eSum = await prisma.expense.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
+            const iSum = await prisma.income.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
+            const totalE = eSum._sum.amount || 0;
+            const totalI = iSum._sum.amount || 0;
+            aiResponse.reply = `📊 *Resumo ${term.includes("passado") ? "do Mês Passado" : "Mensal"}:*\n\n💰 Receitas: R$ ${totalI.toFixed(2)}\n💸 Gastos: R$ ${totalE.toFixed(2)}\n⚖️ Saldo: R$ ${(totalI - totalE).toFixed(2)}`;
+          } else {
             const list = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, orderBy: { due_date: 'asc' } });
             aiResponse.reply = list.length > 0 ? `✅ Suas Tarefas:\n` + list.map(t => `• ${t.title}`).join("\n") : "Sua lista de tarefas está zerada! 🎉";
+          }
+        } else if (action === "INCOME" && parsedData.amount) {
+          const val = parseFloat(String(parsedData.amount).replace(',', '.').replace(/[^\d.]/g, ''));
+          if (val > 0) {
+            await prisma.income.create({ 
+              data: { 
+                user_id: user.id, 
+                amount: val, 
+                description: parsedData.description || "Receita",
+                category: parsedData.category || "Renda"
+              } 
+            });
+            hasChange = true;
           }
         } else if (action === "DONE") {
           const task = await prisma.task.findFirst({ where: { user_id: user.id, completed: false, title: { contains: parsedData.title || "", mode: 'insensitive' } } });
@@ -263,23 +300,61 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
 
     // 6. Enviar em blocos (fatiado por \n\n) para naturalidade
     const parts = finalReply.split("\n\n").filter(p => p.trim() !== "");
-    const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${instance}`;
+    const instanceName = instance || "main";
 
-    for (const part of parts) {
-      await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
-        body: JSON.stringify({ number: remoteJid, text: part.trim() })
-      });
-      // Pequena pausa entre as bolhas de mensagem
-      await new Promise(r => setTimeout(r, 1500));
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i].trim();
+      const isLastPart = i === parts.length - 1;
+      const hasTaskAction = actions.some(a => a.action === "TASK");
+
+      if (isLastPart && hasTaskAction) {
+        // Envia a última parte com botões se houve criação de tarefa
+        await sendEvolutionButtons(remoteJid, part, instanceName, [
+          { id: "confirm_task", text: "Ver Agenda 📅" },
+          { id: "done_last", text: "Concluir Última ✅" }
+        ]);
+      } else {
+        await sendText(remoteJid, part, instanceName);
+      }
+      await new Promise(r => setTimeout(r, 1000));
     }
 
   } catch (err) { 
     console.error("Erro Core:", err); 
   } finally {
-    userLocks.delete(remoteJid); // Libera o bot para a próxima mensagem
+    userLocks.delete(remoteJid);
   }
+}
+
+// --- Helpers de Comunicação ---
+async function sendText(number, text, instance) {
+  const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${instance}`;
+  return fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
+    body: JSON.stringify({ number, text })
+  }).catch(e => console.error("Erro sendText:", e.message));
+}
+
+async function sendEvolutionButtons(number, text, instance, buttons) {
+  const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendButtons/${instance}`;
+  const formattedButtons = buttons.map(b => ({
+    buttonId: b.id,
+    buttonText: { displayText: b.text },
+    type: 1
+  }));
+
+  return fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
+    body: JSON.stringify({
+      number,
+      title: "Assessor Nico",
+      description: text,
+      footer: "Toque em um botão para agir",
+      buttons: formattedButtons
+    })
+  }).catch(e => console.error("Erro sendButtons:", e.message));
 }
 
 // --- Servidor HTTP ---
@@ -375,7 +450,17 @@ const server = http.createServer(async (req, res) => {
         setTimeout(() => processedIds.delete(msgId), 60000); // Limpa o ID após 1 min
 
         const msgNode = payload.data?.message || payload.data;
-        const msgText = msgNode.conversation || msgNode.extendedTextMessage?.text || msgNode.imageMessage?.caption || "";
+        let msgText = msgNode.conversation || msgNode.extendedTextMessage?.text || msgNode.imageMessage?.caption || "";
+        
+        // Tratamento de Resposta de Botão
+        const btnRes = msgNode.buttonsResponseMessage || msgNode.templateButtonReplyMessage;
+        if (btnRes) {
+          const btnId = btnRes.selectedButtonId || btnRes.selectedId;
+          if (btnId === "confirm_task") msgText = "Quero ver minhas tarefas pendentes";
+          if (btnId === "done_last") msgText = "Concluir minha última tarefa";
+          console.log(`[${remoteJid}] 🔘 Botão clicado: ${btnId} -> Interpretado como: ${msgText}`);
+        }
+
         if (!msgText.trim()) return end200();
 
         // DEBOUNCE LOGIC

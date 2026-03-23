@@ -34,14 +34,9 @@ async function checkReminders() {
                 // Se NÃO for curto prazo E já faltar 15 min (ou menos) E não avisou antes E ainda não chegou no horário real
                 if (!isShortTermTask && !task.notified_5min && now < dueDate) {
                     console.log(`[Scheduler] Aviso de 15 min para ${cleanNumber}: ${task.title}`);
-                    await fetch(endpoint, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
-                        body: JSON.stringify({
-                            number: cleanNumber,
-                            text: `⏳ *FALTAM 15 MINUTOS!* \n\nOlá! Passo pra te lembrar que seu compromisso: \n*"${task.title}"*\ncomeça em breve! 🔔`
-                        })
-                    });
+                    await sendEvolutionButtons(cleanNumber, `⏳ *FALTAM 15 MINUTOS!* \n\nOlá! Passo pra te lembrar que seu compromisso: \n*"${task.title}"*\ncomeça em breve! 🔔`, INSTANCE, [
+                        { id: "confirm_task", text: "Ver Agenda 📅" }
+                    ]);
 
                     await prisma.task.update({
                         where: { id: task.id },
@@ -53,14 +48,10 @@ async function checkReminders() {
                 // Se chegou o horário (agora ou passou) e NÃO foi mandado o aviso final ainda
                 if (now >= dueDate && !task.notified) {
                     console.log(`[Scheduler] Aviso NO HORÁRIO para ${cleanNumber}: ${task.title}`);
-                    const response = await fetch(endpoint, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
-                        body: JSON.stringify({
-                            number: cleanNumber,
-                            text: `🔔 *HORA DO LEMBRETE!* \n\nOi! Chegou o horário de: \n*"${task.title}"*\n\nJá conseguiu concluir? Basta me avisar! 😊`
-                        })
-                    });
+                    const response = await sendEvolutionButtons(cleanNumber, `🔔 *HORA DO LEMBRETE!* \n\nOi! Chegou o horário de: \n*"${task.title}"*\n\nJá conseguiu concluir? Basta me avisar! 😊`, INSTANCE, [
+                        { id: "confirm_task", text: "Ver Agenda 📅" },
+                        { id: "done_last", text: "Concluir Agora ✅" }
+                    ]);
 
                     if (response.ok) {
                         await prisma.task.update({
@@ -79,3 +70,24 @@ async function checkReminders() {
 // Roda a cada 1 minuto
 console.log("🚀 [Scheduler] Iniciado! Verificando lembretes a cada 60s.");
 setInterval(checkReminders, 60000);
+
+async function sendEvolutionButtons(number, text, instance, buttons) {
+    const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendButtons/${instance}`;
+    const formattedButtons = buttons.map(b => ({
+        buttonId: b.id,
+        buttonText: { displayText: b.text },
+        type: 1
+    }));
+
+    return fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
+        body: JSON.stringify({
+            number,
+            title: "Assessor Nico",
+            description: text,
+            footer: "Toque em um botão para agir",
+            buttons: formattedButtons
+        })
+    }).catch(e => console.error("Erro sendButtons Scheduler:", e.message));
+}

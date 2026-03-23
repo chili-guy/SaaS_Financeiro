@@ -16,6 +16,7 @@ model User {
 
   messages           Message[]
   expenses           Expense[]
+  incomes            Income[]
   tasks              Task[]
   notes              Note[]
 
@@ -43,6 +44,18 @@ model Expense {
   date        DateTime @default(now())
 
   @@map("fin_expenses")
+}
+
+model Income {
+  id          String   @id @default(uuid())
+  user_id     String
+  user        User     @relation(fields: [user_id], references: [id])
+  amount      Float
+  description String
+  category    String   @default("Renda")
+  date        DateTime @default(now())
+
+  @@map("fin_incomes")
 }
 
 model Task {
