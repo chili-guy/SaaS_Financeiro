@@ -29,11 +29,11 @@ async function checkReminders() {
                 const isShortTermTask = diffCreatedToDue < (15 * 60 * 1000);
                 
                 const cleanNumber = task.user.phone_number.split('@')[0].replace(/\D/g, '');
-                const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${INSTANCE}`;
-
+                
                 // --- LÓGICA 1: Notificação de 15 MINUTOS ANTES ---
                 if (!isShortTermTask && !task.notified_5min && now < dueDate) {
                     console.log(`[Scheduler] Aviso de 15 min para ${cleanNumber}: ${task.title}`);
+                    const text = `⏳ *FALTAM 15 MINUTOS!* \n\nOlá! Passo pra te lembrar que seu compromisso: \n*"${task.title}"*\ncomeça em breve! 🔔`;
                     const fullRecipient = cleanNumber + "@s.whatsapp.net";
                     
                     // Garante entrega via texto primeiro
@@ -52,6 +52,7 @@ async function checkReminders() {
                 // --- LÓGICA 2: Notificação NO HORÁRIO (Real Time) ---
                 if (now >= dueDate && !task.notified) {
                     console.log(`[Scheduler] Aviso NO HORÁRIO para ${cleanNumber}: ${task.title}`);
+                    const text = `🔔 *HORA DO LEMBRETE!* \n\nOi! Chegou o horário de: \n*"${task.title}"*\n\nJá conseguiu concluir? Basta me avisar! 😊`;
                     const fullRecipient = cleanNumber + "@s.whatsapp.net";
                     
                     // Garante entrega via texto primeiro
