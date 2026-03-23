@@ -3,18 +3,18 @@ const prisma = new PrismaClient();
 
 const EVO_URL = process.env.EVOLUTION_API_URL || "http://evolution-api:8080";
 const EVO_KEY = process.env.EVOLUTION_API_KEY || "FInAgentAPISecretKey_2026";
-const INSTANCE = process.env.EVO_INSTANCE || "main";
+const INSTANCE = process.env.INSTANCE || "main";
 
 async function checkReminders() {
     try {
         const now = new Date();
-        const inFiveMinutes = new Date(now.getTime() + 5 * 60 * 1000);
+        const inFifteenMinutes = new Date(now.getTime() + 15 * 60 * 1000);
 
-        // Busca TODAS as tarefas pendentes para processar as duas lógicas (5min e agora)
+        // Busca TODAS as tarefas pendentes para processar as duas lógicas (15min e agora)
         const activeTasks = await prisma.task.findMany({
             where: {
                 completed: false,
-                due_date: { not: null, lte: inFiveMinutes }
+                due_date: { not: null, lte: inFifteenMinutes }
             },
             include: { user: true }
         });
@@ -24,21 +24,21 @@ async function checkReminders() {
                 const dueDate = new Date(task.due_date);
                 const createdAt = new Date(task.created_at);
                 const diffCreatedToDue = dueDate.getTime() - createdAt.getTime();
-                const isShortTermTask = diffCreatedToDue < (5 * 60 * 1000);
+                const isShortTermTask = diffCreatedToDue < (15 * 60 * 1000);
                 
                 const cleanNumber = task.user.phone_number.split('@')[0].replace(/\D/g, '');
                 const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${INSTANCE}`;
 
-                // --- LÓGICA 1: Notificação de 5 MINUTOS ANTES ---
-                // Se NÃO for curto prazo E já faltar 5 min (ou menos) E não avisou antes E ainda não chegou no horário real
+                // --- LÓGICA 1: Notificação de 15 MINUTOS ANTES ---
+                // Se NÃO for curto prazo E já faltar 15 min (ou menos) E não avisou antes E ainda não chegou no horário real
                 if (!isShortTermTask && !task.notified_5min && now < dueDate) {
-                    console.log(`[Scheduler] Aviso de 5 min para ${cleanNumber}: ${task.title}`);
+                    console.log(`[Scheduler] Aviso de 15 min para ${cleanNumber}: ${task.title}`);
                     await fetch(endpoint, {
                         method: "POST",
                         headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
                         body: JSON.stringify({
                             number: cleanNumber,
-                            text: `⏳ *FALTAM 5 MINUTOS!* \n\nOlá! Passo pra te lembrar que seu compromisso: \n*"${task.title}"*\ncomeça em breve! 🔔`
+                            text: `⏳ *FALTAM 15 MINUTOS!* \n\nOlá! Passo pra te lembrar que seu compromisso: \n*"${task.title}"*\ncomeça em breve! 🔔`
                         })
                     });
 
