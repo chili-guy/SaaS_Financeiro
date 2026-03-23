@@ -374,14 +374,33 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
 // --- Helpers de Comunicação ---
 async function sendText(number, text, instance) {
   const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${instance}`;
-  return fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
-    body: JSON.stringify({ number, text })
-  }).catch(e => console.error("Erro sendText:", e.message));
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
+      body: JSON.stringify({ number, text }),
+      signal: controller.signal
+    });
+    
+    if (res.ok) {
+      console.log(`[${number}] ✅ Mensagem enviada com sucesso.`);
+    } else {
+      console.error(`[${number}] ❌ Erro ao enviar mensagem (${res.status}):`, await res.text());
+    }
+  } catch (e) {
+    console.error(`[${number}] ❌ Erro sendText:`, e.message);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function sendEvolutionButtons(number, text, instance, buttons) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
   try {
     const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendButtons/${instance}`;
     const formattedButtons = buttons.map(b => ({
@@ -399,18 +418,23 @@ async function sendEvolutionButtons(number, text, instance, buttons) {
         description: text,
         footer: "Toque em um botão para agir",
         buttons: formattedButtons
-      })
+      }),
+      signal: controller.signal
     });
 
     if (!response.ok) {
       const errData = await response.text();
-      console.error(`[Evolution API] Erro ao enviar botões (${response.status}):`, errData);
+      console.error(`[${number}] ❌ Erro ao enviar botões (${response.status}):`, errData);
       return false;
     }
+
+    console.log(`[${number}] ✅ Botões enviados com sucesso.`);
     return true;
   } catch (e) {
-    console.error("Erro sendButtons:", e.message);
+    console.error(`[${number}] ❌ Erro sendButtons:`, e.message);
     return false;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
