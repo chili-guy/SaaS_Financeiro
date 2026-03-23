@@ -341,24 +341,19 @@ Você é o Assessor Nico, o mentor de produtividade e finanças oficial do usuá
       try {
         console.log(`[${remoteJid}] 📤 Enviando parte ${i + 1}/${parts.length}...`);
         
+        // Sempre envia o texto principal como sendText para garantir entrega
+        await sendText(remoteJid, part, instanceName);
+
+        // Se for a última parte e houver ação de tarefa, tenta enviar botões extras
         if (isLastPart && hasTaskAction) {
-          // Tenta enviar botões, se falhar, envia como texto normal
-          const btnSuccess = await sendEvolutionButtons(remoteJid, part, instanceName, [
+          console.log(`[${remoteJid}] ➕ Tentando enviar botões complementares...`);
+          await sendEvolutionButtons(remoteJid, "Selecione uma opção:", instanceName, [
             { id: "confirm_task", text: "Ver Agenda 📅" },
             { id: "done_last", text: "Concluir Última ✅" }
           ]);
-          
-          if (!btnSuccess) {
-            console.log(`[${remoteJid}] ⚠️ Fallback: Enviando como texto pois botões falharam.`);
-            await sendText(remoteJid, part, instanceName);
-          }
-        } else {
-          await sendText(remoteJid, part, instanceName);
         }
       } catch (sendErr) {
         console.error(`[${remoteJid}] ❌ Erro ao enviar parte ${i + 1}:`, sendErr.message);
-        // Tenta um último fallback se não for o que já falhou
-        await sendText(remoteJid, part, instanceName).catch(() => {});
       }
       
       await new Promise(r => setTimeout(r, 1000));
