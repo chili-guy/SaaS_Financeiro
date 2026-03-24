@@ -539,7 +539,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i].trim();
       const isLastPart = i === parts.length - 1;
-      const hasTaskAction = actions.some(a => a.action === "TASK");
+      const hasTaskAction = uniqueActions.some(a => a.action === "TASK");
       
       try {
         console.log(`[${remoteJid}] 📤 Enviando parte ${i + 1}/${parts.length}...`);
