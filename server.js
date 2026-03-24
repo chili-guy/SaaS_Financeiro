@@ -84,43 +84,40 @@ Mensagem: "${msgText}"`;
 }
 
 /**
- * Formata os gastos agrupados por categoria (Relatório Premium)
+ * Formata os registros financeiros agrupados por categoria (Relatório Premium Padronizado)
  */
-function formatExpensesByCategory(exps) {
-  if (!exps || !exps.length) return "Não encontrei registros de gastos para este período. 📂";
+function formatFinanceRecords(records, type = "EXPENSE") {
+  if (!records || !records.length) {
+    return type === "EXPENSE" ? "Não encontrei registros de gastos. 📂" : "Não encontrei registros de receitas. 📂";
+  }
 
   const catEmojis = {
-    "Alimentação": "🍔",
-    "Alimentação/Supermercado": "🛒",
-    "Alimentação/Lanche": "🍟",
-    "Lazer/Compras": "🛍️",
-    "Saúde/Academia": "🏋️",
-    "Animais de Estimação": "🐱",
-    "Transporte/Manutenção": "🚗",
-    "Saúde": "💊",
-    "Educação": "📚",
-    "Moradia": "🏠",
-    "Lazer": "🎭",
-    "Trabalho": "💼",
-    "Outros": "📦"
+    // Gastos
+    "Alimentação": "🍔", "Alimentação/Supermercado": "🛒", "Alimentação/Lanche": "🍟",
+    "Lazer/Compras": "🛍️", "Saúde/Academia": "🏋️", "Animais de Estimação": "🐱",
+    "Transporte/Manutenção": "🚗", "Saúde": "💊", "Educação": "📚", "Moradia": "🏠",
+    "Lazer": "🎭", "Trabalho": "💼", "Outros": "📦", "Transporte": "🚗",
+    // Receitas
+    "Salário": "💰", "Renda": "💵", "Transferência": "💸", "Investimento": "📈",
+    "Vendas": "🤝", "Presente": "🎁", "Reembolso": "🔙", "Extra": "➕"
   };
 
   let groups = {};
   let totalAll = 0;
 
-  exps.forEach(e => {
-    const c = e.category || "Outros";
+  records.forEach(r => {
+    const c = r.category || (type === "EXPENSE" ? "Outros" : "Renda");
     if (!groups[c]) groups[c] = { total: 0, items: [] };
-    groups[c].total += e.amount;
-    groups[c].items.push(e);
-    totalAll += e.amount;
+    groups[c].total += r.amount;
+    groups[c].items.push(r);
+    totalAll += r.amount;
   });
 
   const sorted = Object.entries(groups).sort((a,b) => b[1].total - a[1].total);
-  let reply = "💸 *Seus Gastos por Categoria:*\n\n";
+  let reply = type === "EXPENSE" ? "💸 *Seus Gastos por Categoria:*\n\n" : "💰 *Suas Receitas por Categoria:*\n\n";
 
   for (const [cat, data] of sorted) {
-    const emoji = catEmojis[cat] || catEmojis["Outros"];
+    const emoji = catEmojis[cat] || (type === "EXPENSE" ? "📦" : "💵");
     const pct = totalAll > 0 ? ((data.total / totalAll) * 100).toFixed(0) : 0;
     reply += `${emoji} *${cat}* (${pct}%)\n`;
     data.items.forEach(i => {
@@ -130,7 +127,7 @@ function formatExpensesByCategory(exps) {
   }
 
   reply += "━━━━━━━━━━━━━━━\n";
-  reply += `💰 *Total Geral: R$ ${totalAll.toFixed(2)}*`;
+  reply += `✨ *Total Geral: R$ ${totalAll.toFixed(2)}*`;
   return reply;
 }
 
@@ -437,18 +434,16 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
             
             if (raw.includes("gastos") || raw.includes("divida") || raw.includes("débito") || raw.includes("contas") || raw.includes("despesa") || intent === "EXPENSE_QUERY") {
               const exps = await prisma.expense.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
-              aiResponse.reply = formatExpensesByCategory(exps);
+              aiResponse.reply = formatFinanceRecords(exps, "EXPENSE");
             } else if (raw.includes("receita") || raw.includes("ganhos") || raw.includes("salario") || intent === "INCOME_QUERY") {
               const incs = await prisma.income.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
-              aiResponse.reply = incs.length > 0 
-                ? `💰 *Suas Receitas:*\n\n` + incs.map(i => `• R$ ${i.amount.toFixed(2)} — ${i.description} (${i.category})`).join("\n")
-                : "Não encontrei registros de receitas. 📂";
+              aiResponse.reply = formatFinanceRecords(incs, "INCOME");
             } else {
               const eSum = await prisma.expense.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
               const iSum = await prisma.income.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
               const totalE = eSum._sum.amount || 0;
               const totalI = iSum._sum.amount || 0;
-              aiResponse.reply = `📊 *Resumo ${raw.includes("passado") ? "do Mês Passado" : "Mensal"}:*\n\n💰 Receitas: R$ ${totalI.toFixed(2)}\n💸 Gastos: R$ ${totalE.toFixed(2)}`;
+              aiResponse.reply = `📊 *Resumo ${raw.includes("passado") ? "do Mês Passado" : "Mensal"}:*\n\n💰 Receita: R$ ${totalI.toFixed(2)}\n💸 Gastos: R$ ${totalE.toFixed(2)}`;
             }
           } else if (intent === "SUMMARY_QUERY" || raw.includes("resumo")) {
             const dateFilter = { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
