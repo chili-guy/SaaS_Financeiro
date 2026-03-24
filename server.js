@@ -408,6 +408,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
           }
           hasChange = true;
         } else if (action === "QUERY") {
+          const raw = msgText.toLowerCase();
           console.log(`[${remoteJid}] 🔎 Roteando consulta via Classificação de Intenção...`);
 
           const intent = await classifyIntent(msgText);
@@ -450,7 +451,6 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
               aiResponse.reply = `📊 *Resumo ${raw.includes("passado") ? "do Mês Passado" : "Mensal"}:*\n\n💰 Receitas: R$ ${totalI.toFixed(2)}\n💸 Gastos: R$ ${totalE.toFixed(2)}`;
             }
           } else if (intent === "SUMMARY_QUERY" || raw.includes("resumo")) {
-            const raw = msgText.toLowerCase();
             const dateFilter = { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
             
             // 1. Tarefas
