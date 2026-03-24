@@ -334,6 +334,13 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
       console.log(`[${remoteJid}] 🛡️ Intent de DELETE detectada mas ação ausente. Forçando DELETE.`);
       aiActions.push({ action: "DELETE", parsedData: { title: msgText } });
     }
+    
+    // 🛡️ NOVO: Se for QUERY e a IA "esqueceu" a ação, nós forçamos aqui
+    const queryIntents = ["TASK_QUERY", "EXPENSE_QUERY", "INCOME_QUERY", "SUMMARY_QUERY"];
+    if (queryIntents.includes(intent) && !aiActions.some(a => a.action === "QUERY")) {
+      console.log(`[${remoteJid}] 🛡️ Intent de QUERY detectada mas ação ausente. Forçando QUERY.`);
+      aiActions.push({ action: "QUERY", parsedData: { type: intent } });
+    }
 
     // 5. Processamento das Ações (Deduplicação agressiva e Case-Insensitive)
     const uniqueActions = [];
@@ -406,7 +413,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
           const intent = await classifyIntent(msgText);
           console.log(`[${remoteJid}] 🧠 Intent detectada: ${intent}`);
 
-          if (intent === "TASK_QUERY") {
+          if (intent === "TASK_QUERY" || raw.includes("tarefa") || raw.includes("agenda") || raw.includes("compromisso")) {
             const list = await prisma.task.findMany({ 
               where: { user_id: user.id, completed: false }, 
               orderBy: { due_date: 'asc' } 
@@ -424,8 +431,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
                   return `🔔 *${t.title}* - ${dateStr}`;
                 }).join("\n") 
               : "Sua lista de tarefas está zerada! 🎉";
-          } else if (intent === "EXPENSE_QUERY" || intent === "INCOME_QUERY") {
-            const raw = msgText.toLowerCase();
+          } else if (intent === "EXPENSE_QUERY" || intent === "INCOME_QUERY" || raw.includes("gastos") || raw.includes("receita")) {
             const dateFilter = raw.includes("mês passado") ? { gte: new Date(now.getFullYear(), now.getMonth() - 1, 1), lt: new Date(now.getFullYear(), now.getMonth(), 1) } : { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
             
             if (raw.includes("gastos") || raw.includes("divida") || raw.includes("débito") || raw.includes("contas") || raw.includes("despesa") || intent === "EXPENSE_QUERY") {
@@ -443,7 +449,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
               const totalI = iSum._sum.amount || 0;
               aiResponse.reply = `📊 *Resumo ${raw.includes("passado") ? "do Mês Passado" : "Mensal"}:*\n\n💰 Receitas: R$ ${totalI.toFixed(2)}\n💸 Gastos: R$ ${totalE.toFixed(2)}`;
             }
-          } else if (intent === "SUMMARY_QUERY") {
+          } else if (intent === "SUMMARY_QUERY" || raw.includes("resumo")) {
             const raw = msgText.toLowerCase();
             const dateFilter = { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
             
