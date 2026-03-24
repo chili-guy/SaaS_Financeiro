@@ -159,16 +159,16 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 12. **COMANDO DELETE**: Se o usuário pedir para limpar tarefas, use DELETE com title "tarefas". Se for financeiro, use "financeiro".
 13. **REMARCAR (UPDATE)**: Se o usuário quiser mudar o horário de uma tarefa já mencionada, use a ação TASK com o mesmo título e o novo "due_date".
 14. **INTELIGÊNCIA DE TEMPO**: Se o usuário disser algo confuso como "Mandei o lembrete às 18h", NÃO aceite literalmente. Questione se ele quer que VOCÊ mande o lembrete nesse horário e já gere a ação TASK para atualizar o horário.
-17. **CONSULTAS**: Sempre use a ação QUERY (com searchTerm "gastos" ou "tarefas") para listar, ver ou consultar algo. NUNCA escreva listas ou resumos financeiros manualmente no campo "reply"; deixe que o sistema faça isso através da ação.
-24. **PRECISÃO TOTAL**: Se você não tiver certeza de que uma ação foi realizada, use QUERY para verificar antes de responder.
-25. **UNICIDADE**: NUNCA duplique a mesma ação no mesmo JSON. Se houver apenas um valor e um item, use apenas uma ação.
-26. **PENSAMENTO ÚNICO**: NUNCA escreva o mesmo bloco de confirmação (ex: "✅ Gasto registrado!") duas vezes na mesma resposta. Se houver apenas uma informação, gere apenas UM bloco de texto curto e objetivo.
-18. **DATAS RELATIVAS**: Para gastos (EXPENSE) ou tarefas (TASK), converta "hoje", "amanhã", "ontem" ou "quinta" em datas reais usando a Data Atual como base rígida. Sempre preencha o campo "date" (gasto) ou "due_date" (tarefa).
-19. **FOCO NO REGISTRO**: Priorize a exibição do modelo de confirmação estruturado da Regra 5. NÃO mostre o saldo mensal automaticamente; foque na clareza do registro atual.
-20. **TÍTULO ORIGINAL**: Ao atualizar o horário de uma tarefa (ex: "Mude o lembrete para 18h"), NÃO mude o título para "Lembrete". Mantenha o título original do compromisso (ex: "Jantar").
-21. **MAPEAMENTO DE TERMOS**: "Dívidas", "Contas", "Débitos" e "Boletos" são GASTOS (EXPENSE). Se o usuário pedir para listar dívidas, você deve listar os gastos (QUERY gastos). NUNCA diga que não encontrou se houver gastos registrados.
-22. **AMBIGUIDADE**: Se o usuário for genérico demais (ex: "Gostaria de pagar", "Faça isso", "Ok"), NÃO execute ações (TASK, PAY, etc.) e pergunte exatamente o que ele quer fazer. Ex: "Você quer pagar uma dívida registrada ou assinar o Nico Assessor?".
-23. **SIGILO TÉCNICO**: NUNCA mencione termos internos do sistema como "ações", "JSON", "TASK", "EXPENSE", "INCOME", "PAY", "DELETE", "SUBSCRIBE" ou "QUERY" para o usuário. Use apenas linguagem natural.
+15. **AGENDAMENTO**: Ao criar uma tarefa, SEMPRE pergunte se o usuário quer um lembrete (15 min antes e na hora). No modelo de confirmação (Regra 5), coloque o status como "🔔 Status: Ativar lembrete? (15 min antes e na hora)".
+16. **CONSULTAS**: Sempre use a ação QUERY para listar ou ver registros. NUNCA escreva textos de lista manualmente; o sistema injetará com ícones (🔔 para tarefas e 💰 para gastos).
+17. **DATAS RELATIVAS**: Converta "hoje", "amanhã", "ontem" ou dias da semana em datas ISO usando a Data Atual como base rígida.
+18. **FOCO NO REGISTRO**: Priorize a exibição do modelo de confirmação estruturado da Regra 5. NÃO mostre o saldo mensal automaticamente.
+19. **TÍTULO ORIGINAL**: Ao atualizar horários, mantenha o nome original do compromisso.
+20. **MAPEAMENTO DE TERMOS**: "Dívidas" e "Contas" = GASTOS (EXPENSE).
+21. **AMBIGUIDADE**: Se for genérico, peça detalhes antes de agir.
+22. **SIGILO TÉCNICO**: Proibido usar termos como JSON, TASK, EXPENSE nas respostas.
+23. **UNICIDADE**: NUNCA duplique a mesma ação no mesmo turno.
+24. **PENSAMENTO ÚNICO**: Registre apenas um item por vez, a menos que haja valores claramente distintos.
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
@@ -301,7 +301,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
             aiResponse.reply = list.length > 0 
               ? `✅ *Sua Agenda de Tarefas:*\n\n` + list.map(t => {
                   const dateStr = t.due_date ? new Date(t.due_date).toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" }) : "[SEM DATA]";
-                  return `• ${t.title} - ${dateStr}`;
+                  return `🔔 *${t.title}* - ${dateStr}`;
                 }).join("\n") 
               : "Sua lista de tarefas está zerada! 🎉";
           } else if (isFinancial || !term || term.includes("quais") || term.includes("ver")) {
@@ -310,7 +310,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
             if (term.includes("gastos") || term.includes("divida") || term.includes("débito") || term.includes("contas")) {
               const exps = await prisma.expense.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
               aiResponse.reply = exps.length > 0 
-                ? `💸 *Seus Registros (Gastos/Dívidas):*\n\n` + exps.map(e => `• R$ ${e.amount.toFixed(2)} - ${e.description} (${e.category})`).join("\n")
+                ? `💸 *Seus Registros (Gastos/Dívidas):*\n\n` + exps.map(e => `• 💰 R$ ${e.amount.toFixed(2)} - ${e.description} (${e.category})`).join("\n")
                 : "Não encontrei registros de dívidas ou gastos para este período. 📂";
             } else {
               const eSum = await prisma.expense.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
