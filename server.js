@@ -498,15 +498,22 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
       } catch(e) { console.error("Erro DB Action:", e.message); }
     }
 
-    // 6. Resposta Final (Deduplicação de blocos para evitar duplo envio visual)
+    // 6. Resposta Final (Deduplicação e Tratamento de Listas)
     const rawReply = (aiResponse.reply || (hasChange ? "Tudo certo! ✅" : "Entendido.")).trim();
-    const uniqueParts = [...new Set(rawReply.split("\n\n").map(p => p.trim()))].filter(p => p !== "");
-    const finalReply = uniqueParts.join("\n\n");
     
+    // Se for uma lista financeira/agenda ou uma mensagem muito longa, enviamos em bloco ÚNICO
+    const isList = rawReply.includes("Seus Gastos por Categoria") || rawReply.includes("Sua Agenda de Tarefas") || rawReply.length > 800;
+    
+    let parts;
+    if (isList) {
+      parts = [rawReply];
+    } else {
+      parts = [...new Set(rawReply.split("\n\n").map(p => p.trim()))].filter(p => p !== "");
+    }
+
+    const finalReply = parts.join("\n\n");
     await prisma.message.create({ data: { user_id: user.id, role: "assistant", content: finalReply } });
 
-    // 6. Enviar em blocos fatiados
-    const parts = uniqueParts;
     const instanceName = instance || "main";
 
     console.log(`[${remoteJid}] 📤 Iniciando envio de ${parts.length} partes...`);
