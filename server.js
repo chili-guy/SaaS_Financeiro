@@ -238,7 +238,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 
 📝 [Descrição/Título]: [texto exato do usuário, ex: "mercado"]
 💰 Valor: R$ [valor] (se financeiro)
-📅 [Data/Hora]: [DD-MM-AAAA ou horário]
+📅 [Data/Hora]: [Apenas "DD-MM-AAAA" se for dia inteiro, ou "DD-MM-AAAA às HH:mm" se tiver hora]
 🏷️ [Categoria/Alarme]: [categoria ou Status do Lembrete]
 6. **EMOJIS**: Use emojis de forma moderada e estratégica para dar vida à conversa (ex: 💰 para finanças, ✅ para confirmações, 🔔 para avisos). Máximo 1 por parágrafo. Seja elegante.
 7. **INSTRUÇÃO PROATIVA**: Para comandos vagos, dê um exemplo útil (ex: "Pode me mandar seus gastos ou pedir para eu lembrar de algo!").
@@ -249,7 +249,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 12. **COMANDO DELETE**: Se o usuário pedir para limpar tarefas, use DELETE com title "tarefas". Se for financeiro, use "financeiro".
 13. **REMARCAR (UPDATE)**: Se o usuário quiser mudar o horário de uma tarefa já mencionada, use a ação TASK com o mesmo título e o novo "due_date".
 14. **INTELIGÊNCIA DE TEMPO**: Se o usuário disser algo confuso como "Mandei o lembrete às 18h", NÃO aceite literalmente. Questione se ele quer que VOCÊ mande o lembrete nesse horário e já gere a ação TASK para atualizar o horário.
-15. **AGENDAMENTO**: Ao criar uma tarefa, SEMPRE pergunte se o usuário quer um lembrete (15 min antes e na hora). No modelo de confirmação (Regra 5), coloque o status como "🔔 Status: Ativar lembrete? (15 min antes e na hora)".
+15. **AGENDAMENTO**: Ao criar uma tarefa, SEMPRE pergunte se o usuário quer um lembrete (15 min antes e na hora). No modelo de confirmação (Regra 5), coloque o status como "🔔 Status: Ativar lembrete? (15 min antes e na hora)". Se NÃO houver hora na mensagem, omita o horário no campo "📅 Data/Hora".
 16. **CONSULTAS**: Sempre use a ação QUERY para listar ou ver registros. NUNCA escreva textos de lista manualmente; o sistema injetará com ícones (🔔 para tarefas e 💰 para gastos).
 17. **DATAS RELATIVAS**: Converta "hoje", "amanhã", "ontem" ou dias da semana em datas ISO usando a Data Atual como base rígida.
 18. **FOCO NO REGISTRO**: Priorize a exibição do modelo de confirmação estruturado da Regra 5. NÃO mostre o saldo mensal automaticamente.
@@ -398,7 +398,14 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
             });
             aiResponse.reply = list.length > 0 
               ? `✅ *Sua Agenda de Tarefas:*\n\n` + list.map(t => {
-                  const dateStr = t.due_date ? new Date(t.due_date).toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" }) : "[SEM DATA]";
+                  if (!t.due_date) return `🔔 *${t.title}* - [SEM DATA]`;
+                  const d = new Date(t.due_date);
+                  const isEndOfDay = d.getHours() === 23 && d.getMinutes() === 59;
+                  const dateStr = d.toLocaleString("pt-BR", { 
+                    day: "2-digit", month: "2-digit", 
+                    ...(isEndOfDay ? {} : { hour: "2-digit", minute: "2-digit" }),
+                    timeZone: "America/Sao_Paulo" 
+                  });
                   return `🔔 *${t.title}* - ${dateStr}`;
                 }).join("\n") 
               : "Sua lista de tarefas está zerada! 🎉";
