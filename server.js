@@ -254,12 +254,12 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 17. **DATAS RELATIVAS**: Converta "hoje", "amanhã", "ontem" ou dias da semana em datas ISO usando a Data Atual como base rígida.
 18. **FOCO NO REGISTRO**: Priorize a exibição do modelo de confirmação estruturado da Regra 5. NÃO mostre o saldo mensal automaticamente.
 19. **TÍTULO ORIGINAL**: Ao atualizar horários, mantenha o nome original do compromisso.
-20. **MAPEAMENTO DE TERMOS**: "Dívidas" e "Contas" = GASTOS (EXPENSE).
-21. **AMBIGUIDADE**: Se for genérico, peça detalhes antes de agir.
-22. **SIGILO TÉCNICO**: Proibido usar termos como JSON, TASK, EXPENSE nas respostas.
+21. **AMBIGUIDADE**: Se o usuário for genérico (ex: "Quero pagar", "Registra aí"), você está PROIBIDO de agir por conta própria. Pergunte o que é e qual o valor.
+22. **SIGILO TÉCNICO**: Proibido usar termos como JSON, TASK, EXPENSE nas respostas. Use apenas linguagem natural.
 23. **UNICIDADE**: NUNCA duplique a mesma ação no mesmo turno.
-26. **PENSAMENTO ÚNICO**: Registre apenas um item por vez, a menos que haja valores claramente distintos.
-27. **AÇÃO REAL**: Se o usuário pedir para apagar ou limpar, você DEVE gerar a ação DELETE no JSON. NUNCA diga que limpou algo se a ação DELETE não estiver presente.
+24. **PENSAMENTO ÚNICO**: Registre apenas um item por vez, a menos que haja valores claramente distintos.
+25. **AÇÃO REAL**: Se o usuário pedir para apagar ou limpar, você DEVE gerar a ação DELETE no JSON. NUNCA diga que limpou algo se a ação DELETE não estiver presente.
+26. **VALOR OBRIGATÓRIO (PAY)**: Você NUNCA deve executar a ação PAY sem saber o valor exato. Se o usuário disser "Pagar dentista", pergunte: "Qual o valor do pagamento para eu registrar no seu financeiro?". Só gere a ação PAY quando tiver o valor confirmado.
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
@@ -267,7 +267,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
     { "action": "TASK", "parsedData": { "title": "string", "due_date": "ISO-DATE ou null" } },
     { "action": "EXPENSE", "parsedData": { "amount": float, "description": "string", "category": "string" } },
     { "action": "INCOME", "parsedData": { "amount": float, "description": "string", "category": "string" } },
-    { "action": "PAY", "parsedData": { "title": "string" } },
+    { "action": "PAY", "parsedData": { "title": "string", "amount": float } },
     { "action": "SUBSCRIBE", "parsedData": {} }
   ],
   "reply": "Sua resposta natural e humana aqui fatiada em bolhas por \\n\\n"
@@ -497,9 +497,12 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
           const afterE = await prisma.expense.count({ where: { user_id: user.id } });
           console.log(`[${remoteJid}] 🗑️ Stats Remoção - Tarefas: ${beforeT}->${afterT}, Gastos: ${beforeE}->${afterE}`);
           hasChange = true;
-        } else if (action === "PAY") {
-          console.log(`[${remoteJid}] 💳 Ação PAY (Dívida) detectada.`);
-          // Apenas log de interesse, a IA deve perguntar qual dívida no "reply".
+        } else if (action === "PAY" && parsedData.amount) {
+          console.log(`[${remoteJid}] 💳 Ação PAY (Dívida) detectada: R$ ${parsedData.amount}`);
+          // Podemos opcionalmente criar um gasto automático aqui se desejado,
+          // mas a regra 26 exige que a IA peça o valor primeiro. 
+          // Se chegou aqui com valor, o DB pode ser atualizado.
+          hasChange = true;
         } else if (action === "SUBSCRIBE") {
           console.log(`[${remoteJid}] 💰 Gerando Checkout Stripe...`);
           const session = await stripe.checkout.sessions.create({
