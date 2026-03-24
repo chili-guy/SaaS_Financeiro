@@ -287,13 +287,15 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
           hasChange = true;
         } else if (action === "QUERY") {
           console.log(`[${remoteJid}] 🔎 Buscando informações históricas...`);
+          // Combinamos o searchTerm da IA com o texto original para máxima precisão
           const term = (parsedData.searchTerm || "").toLowerCase().trim();
+          const raw = msgText.toLowerCase().trim();
           
-          const isFinancial = ["gastos", "despesas", "receitas", "ganhos", "saldo", "total", "balanço", "relatório", "dividas", "dívidas", "contas", "boletos", "debito", "débito", "pendencias", "pendências", "financeiro", "extrato"].some(k => term.includes(k));
-          const isTask      = ["tarefa", "agenda", "compromisso", "lembrete", "marcado", "anota", "aviso"].some(k => term.includes(k));
+          const isFinancial = ["gastos", "despesas", "receitas", "ganhos", "saldo", "total", "balanço", "relatório", "dividas", "dívidas", "contas", "boletos", "debito", "débito", "pendencias", "pendências", "financeiro", "extrato"].some(k => term.includes(k) || raw.includes(k));
+          const isTask      = ["tarefa", "agenda", "compromisso", "lembrete", "marcado", "anota", "aviso"].some(k => term.includes(k) || raw.includes(k));
           
-          // FORÇAR TAREFAS SE VIER "LISTE" SEM ESPECIFICAÇÃO FINANCEIRA
-          if (isTask || (term.includes("liste") && !isFinancial)) {
+          // FORÇAR TAREFAS SE VIER "LISTE" OU "QUAIS" SEM ESPECIFICAÇÃO FINANCEIRA OU COM "TAREFA" NO RAW
+          if (isTask || ((raw.includes("liste") || raw.includes("quais") || raw.includes("ver")) && !isFinancial)) {
             const list = await prisma.task.findMany({ 
               where: { user_id: user.id, completed: false }, 
               orderBy: { due_date: 'asc' } 
@@ -307,7 +309,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
           } else if (isFinancial || !term || term.includes("quais") || term.includes("ver")) {
             const dateFilter = term.includes("mês passado") ? { gte: new Date(now.getFullYear(), now.getMonth() - 1, 1), lt: new Date(now.getFullYear(), now.getMonth(), 1) } : { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
             
-            if (term.includes("gastos") || term.includes("divida") || term.includes("débito") || term.includes("contas")) {
+            if (raw.includes("gastos") || raw.includes("divida") || raw.includes("débito") || raw.includes("contas") || raw.includes("despesa")) {
               const exps = await prisma.expense.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
               aiResponse.reply = exps.length > 0 
                 ? `💸 *Seus Registros (Gastos/Dívidas):*\n\n` + exps.map(e => `• 💰 R$ ${e.amount.toFixed(2)} - ${e.description} (${e.category})`).join("\n")
