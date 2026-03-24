@@ -40,6 +40,44 @@ function cleanTitle(title) {
 }
 
 /**
+ * Função de Classificação de Intenção via IA (Reforço de Precisão)
+ */
+async function classifyIntent(msgText) {
+  try {
+    const prompt = `Classifique a intenção do usuário baseado na mensagem. Responda APENAS um JSON válido no formato: { "intent": "..." }. 
+
+Intenções possíveis:
+- TASK_QUERY (Consultar agenda, tarefas, compromissos, lembretes)
+- EXPENSE_QUERY (Consultar gastos, dívidas, boletos, faturas, financeiro)
+- INCOME_QUERY (Consultar ganhos, salários, depósitos)
+- UNKNOWN (Outros casos)
+
+Mensagem: "${msgText}"`;
+
+    const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${DEEPSEEK_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "deepseek-chat",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0,
+        response_format: { type: "json_object" }
+      })
+    });
+
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content || "{}";
+    return JSON.parse(content).intent || "UNKNOWN";
+  } catch (e) {
+    console.error("❌ Erro classifyIntent:", e.message);
+    return "UNKNOWN";
+  }
+}
+
+/**
  * Motor Central de Inteligência do Nico
  */
 async function processNicoCore(remoteJid, msgText, instance) {
@@ -286,16 +324,12 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
           }
           hasChange = true;
         } else if (action === "QUERY") {
-          console.log(`[${remoteJid}] 🔎 Buscando informações históricas...`);
-          // Combinamos o searchTerm da IA com o texto original para máxima precisão
-          const term = (parsedData.searchTerm || "").toLowerCase().trim();
-          const raw = msgText.toLowerCase().trim();
-          
-          const isFinancial = ["gastos", "despesas", "receitas", "ganhos", "saldo", "total", "balanço", "relatório", "dividas", "dívidas", "contas", "boletos", "debito", "débito", "pendencias", "pendências", "financeiro", "extrato"].some(k => term.includes(k) || raw.includes(k));
-          const isTask      = ["tarefa", "agenda", "compromisso", "lembrete", "marcado", "anota", "aviso"].some(k => term.includes(k) || raw.includes(k));
-          
-          // FORÇAR TAREFAS SE VIER "LISTE" OU "QUAIS" SEM ESPECIFICAÇÃO FINANCEIRA OU COM "TAREFA" NO RAW
-          if (isTask || ((raw.includes("liste") || raw.includes("quais") || raw.includes("ver")) && !isFinancial)) {
+          console.log(`[${remoteJid}] 🔎 Roteando consulta via Classificação de Intenção...`);
+
+          const intent = await classifyIntent(msgText);
+          console.log(`[${remoteJid}] 🧠 Intent detectada: ${intent}`);
+
+          if (intent === "TASK_QUERY") {
             const list = await prisma.task.findMany({ 
               where: { user_id: user.id, completed: false }, 
               orderBy: { due_date: 'asc' } 
@@ -306,10 +340,11 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
                   return `🔔 *${t.title}* - ${dateStr}`;
                 }).join("\n") 
               : "Sua lista de tarefas está zerada! 🎉";
-          } else if (isFinancial || !term || term.includes("quais") || term.includes("ver")) {
-            const dateFilter = term.includes("mês passado") ? { gte: new Date(now.getFullYear(), now.getMonth() - 1, 1), lt: new Date(now.getFullYear(), now.getMonth(), 1) } : { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
+          } else if (intent === "EXPENSE_QUERY" || intent === "INCOME_QUERY" || intent === "UNKNOWN") {
+            const raw = msgText.toLowerCase();
+            const dateFilter = raw.includes("mês passado") ? { gte: new Date(now.getFullYear(), now.getMonth() - 1, 1), lt: new Date(now.getFullYear(), now.getMonth(), 1) } : { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
             
-            if (raw.includes("gastos") || raw.includes("divida") || raw.includes("débito") || raw.includes("contas") || raw.includes("despesa")) {
+            if (raw.includes("gastos") || raw.includes("divida") || raw.includes("débito") || raw.includes("contas") || raw.includes("despesa") || intent === "EXPENSE_QUERY") {
               const exps = await prisma.expense.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
               aiResponse.reply = exps.length > 0 
                 ? `💸 *Seus Registros (Gastos/Dívidas):*\n\n` + exps.map(e => `• 💰 R$ ${e.amount.toFixed(2)} - ${e.description} (${e.category})`).join("\n")
@@ -319,10 +354,10 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
               const iSum = await prisma.income.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
               const totalE = eSum._sum.amount || 0;
               const totalI = iSum._sum.amount || 0;
-              aiResponse.reply = `📊 *Resumo ${term.includes("passado") ? "do Mês Passado" : "Mensal"}:*\n\n💰 Receitas: R$ ${totalI.toFixed(2)}\n💸 Gastos: R$ ${totalE.toFixed(2)}`;
+              aiResponse.reply = `📊 *Resumo ${raw.includes("passado") ? "do Mês Passado" : "Mensal"}:*\n\n💰 Receitas: R$ ${totalI.toFixed(2)}\n💸 Gastos: R$ ${totalE.toFixed(2)}`;
             }
           } else {
-            aiResponse.reply = "Pode me perguntar sobre seus gastos ou suas tarefas que eu te ajudo! 🚀";
+            aiResponse.reply = "Pode me pedir para ver tarefas, gastos ou registrar algo!";
           }
         } else if (action === "INCOME" && parsedData.amount) {
           const val = parseFloat(String(parsedData.amount).replace(',', '.').replace(/[^\d.]/g, ''));
