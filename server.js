@@ -78,6 +78,57 @@ Mensagem: "${msgText}"`;
 }
 
 /**
+ * Formata os gastos agrupados por categoria (Relatório Premium)
+ */
+function formatExpensesByCategory(exps) {
+  if (!exps || !exps.length) return "Não encontrei registros de gastos para este período. 📂";
+
+  const catEmojis = {
+    "Alimentação": "🍔",
+    "Alimentação/Supermercado": "🛒",
+    "Alimentação/Lanche": "🍟",
+    "Lazer/Compras": "🛍️",
+    "Saúde/Academia": "🏋️",
+    "Animais de Estimação": "🐱",
+    "Transporte/Manutenção": "🚗",
+    "Saúde": "💊",
+    "Educação": "📚",
+    "Moradia": "🏠",
+    "Lazer": "🎭",
+    "Trabalho": "💼",
+    "Outros": "📦"
+  };
+
+  let groups = {};
+  let totalAll = 0;
+
+  exps.forEach(e => {
+    const c = e.category || "Outros";
+    if (!groups[c]) groups[c] = { total: 0, items: [] };
+    groups[c].total += e.amount;
+    groups[c].items.push(e);
+    totalAll += e.amount;
+  });
+
+  const sorted = Object.entries(groups).sort((a,b) => b[1].total - a[1].total);
+  let reply = "💸 *Seus Gastos por Categoria:*\n\n";
+
+  for (const [cat, data] of sorted) {
+    const emoji = catEmojis[cat] || catEmojis["Outros"];
+    const pct = totalAll > 0 ? ((data.total / totalAll) * 100).toFixed(0) : 0;
+    reply += `${emoji} *${cat}* (${pct}%)\n`;
+    data.items.forEach(i => {
+      reply += `• R$ ${i.amount.toFixed(2)} — ${i.description}\n`;
+    });
+    reply += `🔸 Total: R$ ${data.total.toFixed(2)}\n\n`;
+  }
+
+  reply += "━━━━━━━━━━━━━━━\n";
+  reply += `💰 *Total Geral: R$ ${totalAll.toFixed(2)}*`;
+  return reply;
+}
+
+/**
  * Motor Central de Inteligência do Nico
  */
 async function processNicoCore(remoteJid, msgText, instance) {
@@ -346,9 +397,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
             
             if (raw.includes("gastos") || raw.includes("divida") || raw.includes("débito") || raw.includes("contas") || raw.includes("despesa") || intent === "EXPENSE_QUERY") {
               const exps = await prisma.expense.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
-              aiResponse.reply = exps.length > 0 
-                ? `💸 *Seus Registros (Gastos/Dívidas):*\n\n` + exps.map(e => `• 💰 R$ ${e.amount.toFixed(2)} - ${e.description} (${e.category})`).join("\n")
-                : "Não encontrei registros de dívidas ou gastos para este período. 📂";
+              aiResponse.reply = formatExpensesByCategory(exps);
             } else {
               const eSum = await prisma.expense.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
               const iSum = await prisma.income.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
