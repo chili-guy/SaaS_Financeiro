@@ -249,7 +249,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 12. **COMANDO DELETE**: Se o usuário pedir para limpar tarefas, use DELETE com title "tarefas". Se for financeiro, use "financeiro".
 13. **REMARCAR (UPDATE)**: Se o usuário quiser mudar o horário de uma tarefa já mencionada, use a ação TASK com o mesmo título e o novo "due_date".
 14. **INTELIGÊNCIA DE TEMPO**: Se o usuário disser algo confuso como "Mandei o lembrete às 18h", NÃO aceite literalmente. Questione se ele quer que VOCÊ mande o lembrete nesse horário e já gere a ação TASK para atualizar o horário.
-15. **AGENDAMENTO**: Ao criar uma tarefa, SEMPRE pergunte se o usuário quer um lembrete (15 min antes e na hora). No modelo de confirmação (Regra 5), coloque o status como "🔔 Status: Ativar lembrete? (15 min antes e na hora)". Se NÃO houver hora na mensagem, omita o horário no campo "📅 Data/Hora".
+15. **AGENDAMENTO**: Lembretes são DESATIVADOS por padrão. Sempre pergunte se o usuário deseja ativar. Se ele disser para "Ativar lembrete", "Lembrar de", ou confirmar positivamente sobre o lembrete, use "remind: true" no JSON.
 16. **CONSULTAS**: Sempre use a ação QUERY para listar ou ver registros. NUNCA escreva textos de lista manualmente; o sistema injetará com ícones (🔔 para tarefas e 💰 para gastos).
 17. **DATAS RELATIVAS**: Converta "hoje", "amanhã", "ontem" ou dias da semana em datas ISO usando a Data Atual como base rígida.
 18. **FOCO NO REGISTRO**: Priorize a exibição do modelo de confirmação estruturado da Regra 5. NÃO mostre o saldo mensal automaticamente.
@@ -264,7 +264,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
   "actions": [
-    { "action": "TASK", "parsedData": { "title": "string", "due_date": "ISO-DATE ou null" } },
+    { "action": "TASK", "parsedData": { "title": "string", "due_date": "ISO-DATE ou null", "remind": boolean } },
     { "action": "EXPENSE", "parsedData": { "amount": float, "description": "string", "category": "string" } },
     { "action": "INCOME", "parsedData": { "amount": float, "description": "string", "category": "string" } },
     { "action": "PAY", "parsedData": { "title": "string", "amount": float } },
@@ -359,8 +359,8 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
           const existing = await prisma.task.findFirst({ where: { user_id: user.id, completed: false, title: { contains: title, mode: 'insensitive' } } });
           const finalDueDate = parsedData.due_date ? new Date(String(parsedData.due_date).replace(/Z$/i, "")) : null;
           
-          // Permite que a IA silencie o lembrete enviando notified: true no JSON
-          const notifiedFlag = parsedData.notified === true; 
+          // Ativa lembretes APENAS se "remind: true" vier explicitamente no JSON
+          const notifiedFlag = (parsedData.remind === true) ? false : true; 
           
           if (existing) {
             console.log(`[${remoteJid}] ⏳ ATUALIZANDO TAREFA: "${existing.title}" para ${finalDueDate}...`);
