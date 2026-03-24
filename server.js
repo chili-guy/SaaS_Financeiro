@@ -50,6 +50,7 @@ Intenções possíveis:
 - TASK_QUERY (Consultar agenda, tarefas, compromissos, lembretes)
 - EXPENSE_QUERY (Consultar gastos, dívidas, boletos, faturas, financeiro)
 - INCOME_QUERY (Consultar ganhos, salários, depósitos)
+- SUMMARY_QUERY (Resumo de tudo, visão geral, como estou hoje, balanço geral)
 - DELETE (Apagar, limpar, excluir histórico, tarefas ou gastos)
 - UNKNOWN (Outros casos)
 
@@ -423,6 +424,22 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
               const totalI = iSum._sum.amount || 0;
               aiResponse.reply = `📊 *Resumo ${raw.includes("passado") ? "do Mês Passado" : "Mensal"}:*\n\n💰 Receitas: R$ ${totalI.toFixed(2)}\n💸 Gastos: R$ ${totalE.toFixed(2)}`;
             }
+          } else if (intent === "SUMMARY_QUERY") {
+            const raw = msgText.toLowerCase();
+            const dateFilter = { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
+            
+            // 1. Tarefas
+            const tasks = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, orderBy: { due_date: 'asc' }, take: 5 });
+            let taskPart = tasks.length > 0 ? `📅 *Agenda Recente:*\n` + tasks.map(t => `🔔 ${t.title}`).join("\n") : "✅ Agenda limpa!";
+            
+            // 2. Financeiro
+            const eSum = await prisma.expense.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
+            const iSum = await prisma.income.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
+            const totalE = eSum._sum.amount || 0;
+            const totalI = iSum._sum.amount || 0;
+            let finPart = `\n\n📊 *Balanço Mensal:*\n💰 Receitas: R$ ${totalI.toFixed(2)}\n💸 Gastos: R$ ${totalE.toFixed(2)}`;
+
+            aiResponse.reply = `✨ *Seu Resumo Geral* ✨\n\n${taskPart}${finPart}\n\nO que gostaria de detalhar agora?`;
           } else {
             // UNKNOWN ou Fallback: Preserva a resposta original da IA para perguntas gerais
             console.log(`[${remoteJid}] ❓ Intenção não mapeada. Usando resposta natural da IA.`);
