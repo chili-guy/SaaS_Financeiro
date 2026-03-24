@@ -452,32 +452,39 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
           aiResponse.reply = `✨ *Limpeza concluída!* \n\nRemovi ${remT} tarefas duplicadas e ${remE} registros financeiros repetidos do seu histórico. ✅`;
           console.log(`[${remoteJid}] ✨ Limpeza concluída: ${remT} tarefas, ${remE} gastos.`);
         } else if (action === "DELETE") {
-          const s = (parsedData.title || "").toLowerCase();
-          const cleanTasks = s.includes("tarefa") || s.includes("agenda");
-          const cleanFinance = s.includes("gasto") || s.includes("despesa") || s.includes("receita") || s.includes("ganho") || s.includes("financeiro");
-          const cleanAll = s.includes("tudo") || s.includes("histórico") || (!cleanTasks && !cleanFinance && (s.includes("limpar") || s.includes("apagar")));
+          console.log(`[${remoteJid}] 🗑️ DELETE acionado`);
+          const raw = msgText.toLowerCase();
+
+          const cleanTasks = raw.includes("tarefa") || raw.includes("agenda");
+          const cleanFinance = ["gasto", "despesa", "receita", "ganho", "financeiro", "dinheiro"].some(k => raw.includes(k));
+          const cleanAll = ["tudo", "geral", "histórico", "reset"].some(k => raw.includes(k));
+
+          const beforeT = await prisma.task.count({ where: { user_id: user.id } });
+          const beforeE = await prisma.expense.count({ where: { user_id: user.id } });
 
           if (cleanAll) {
-            console.log(`[${remoteJid}] 🗑️ RESET TOTAL...`);
+            console.log(`[${remoteJid}] 🗑️ RESET TOTAL`);
             await prisma.task.deleteMany({ where: { user_id: user.id } });
             await prisma.expense.deleteMany({ where: { user_id: user.id } });
             await prisma.income.deleteMany({ where: { user_id: user.id } });
-            aiResponse.reply = `🗑️ *RESET COMPLETO!* \n\nRemovi todas as suas tarefas e registros financeiros. ✨`;
-          } else if (cleanTasks) {
-            console.log(`[${remoteJid}] 🗑️ LIMPANDO TAREFAS...`);
-            const count = await prisma.task.deleteMany({ where: { user_id: user.id } });
-            aiResponse.reply = `🗑️ *TAREFAS LIMPAS!* \n\nRemovi suas ${count.count} tarefas da agenda. ✅`;
+            aiResponse.reply = "🗑️ *RESET COMPLETO!* \n\nRemovi todas as suas tarefas e registros financeiros. ✨";
           } else if (cleanFinance) {
-            console.log(`[${remoteJid}] 🗑️ LIMPANDO FINANCEIRO...`);
-            await prisma.expense.deleteMany({ where: { user_id: user.id } });
-            await prisma.income.deleteMany({ where: { user_id: user.id } });
-            aiResponse.reply = `🗑️ *FINANCEIRO LIMPO!* \n\nRemovi todos os seus registros de gastos e receitas. 💸`;
+            console.log(`[${remoteJid}] 💸 LIMPANDO FINANCEIRO`);
+            const dExp = await prisma.expense.deleteMany({ where: { user_id: user.id } });
+            const dInc = await prisma.income.deleteMany({ where: { user_id: user.id } });
+            aiResponse.reply = `🗑️ *FINANCEIRO LIMPO!* \n\nRemovi ${dExp.count} gastos e ${dInc.count} receitas do seu histórico. 💸`;
+          } else if (cleanTasks) {
+            console.log(`[${remoteJid}] 📅 LIMPANDO TAREFAS`);
+            const del = await prisma.task.deleteMany({ where: { user_id: user.id } });
+            aiResponse.reply = `🗑️ *TAREFAS LIMPAS!* \n\nRemovi as ${del.count} tarefas da sua agenda. ✅`;
           } else {
-            console.log(`[${remoteJid}] 🗑️ Removendo termo específico: "${s}"...`);
-            const dt = await prisma.task.deleteMany({ where: { user_id: user.id, title: { contains: s, mode: 'insensitive' } } });
-            const de = await prisma.expense.deleteMany({ where: { user_id: user.id, description: { contains: s, mode: 'insensitive' } } });
-            aiResponse.reply = `🗑️ *Removido:* ${dt.count + de.count} itens contendo "${s}".`;
+            console.log(`[${remoteJid}] ⚠️ DELETE não reconhecido`);
+            aiResponse.reply = "O que exatamente você quer limpar? Suas *tarefas* ou seus *gastos*?";
           }
+
+          const afterT = await prisma.task.count({ where: { user_id: user.id } });
+          const afterE = await prisma.expense.count({ where: { user_id: user.id } });
+          console.log(`[${remoteJid}] 🗑️ Stats Remoção - Tarefas: ${beforeT}->${afterT}, Gastos: ${beforeE}->${afterE}`);
           hasChange = true;
         } else if (action === "PAY") {
           console.log(`[${remoteJid}] 💳 Ação PAY (Dívida) detectada.`);
