@@ -56,6 +56,9 @@ Intenções possíveis:
 
 Mensagem: "${msgText}"`;
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
+
     const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -67,8 +70,9 @@ Mensagem: "${msgText}"`;
         messages: [{ role: "user", content: prompt }],
         temperature: 0,
         response_format: { type: "json_object" }
-      })
-    });
+      }),
+      signal: controller.signal
+    }).finally(() => clearTimeout(timeoutId));
 
     const data = await res.json();
     const content = data.choices?.[0]?.message?.content || "{}";
@@ -178,7 +182,7 @@ async function processNicoCore(remoteJid, msgText, instance) {
 
     // 2. Histórico e Contexto
     await prisma.message.create({ data: { user_id: user.id, role: "user", content: msgText } });
-    const history = await prisma.message.findMany({ where: { user_id: user.id }, orderBy: { created_at: 'desc' }, take: 6 });
+    const history = await prisma.message.findMany({ where: { user_id: user.id }, orderBy: { created_at: 'desc' }, take: 12 });
     const memory  = history.reverse().map(m => ({ role: m.role, content: m.content }));
 
     const pendingTasks = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, take: 15 });
@@ -278,6 +282,9 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 
 *Nota: Se o usuário pedir para você 'Parar de mandar mensagem', responda que entendeu e NÃO inclua ações.*`;
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
+
     // 4. Chamada IA (Modo JSON Forçado para estabilidade absoluta)
     const upstream = await fetch("https://api.deepseek.com/v1/chat/completions", {
       method:  "POST",
@@ -286,28 +293,33 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
         model: "deepseek-chat",
         messages: [{ role: "system", "content": sysPrompt }, ...memory, { role: "user", "content": msgText }],
         temperature: 0.1,
-        response_format: { type: "json_object" } // QA: Obriga a IA a responder JSON válido
+        response_format: { type: "json_object" } 
       }),
-    });
-
-    const dsData = await upstream.json();
-    if (!upstream.ok) return console.error("Erro AI:", dsData);
-
-    let rawContent = dsData.choices?.[0]?.message?.content || "";
+      signal: controller.signal
+    }).finally(() => clearTimeout(timeoutId));
+    
     let aiResponse = { actions: [], reply: "" };
 
-    try {
-      const s = rawContent.indexOf('{');
-      const e = rawContent.lastIndexOf('}');
-      if (s !== -1 && e !== -1) {
-        aiResponse = JSON.parse(rawContent.substring(s, e + 1));
-      } else {
-        aiResponse.reply = rawContent.trim();
+    if (!upstream.ok) {
+      console.error(`[${remoteJid}] ❌ Erro Upstream DeepSeek: ${upstream.status}`);
+      aiResponse.reply = "Tive um soluço técnico ao falar com meu cérebro. Pode tentar de novo? 🧠💫";
+    } else {
+      const dsData = await upstream.json();
+      let rawContent = dsData.choices?.[0]?.message?.content || "";
+      
+      try {
+        const s = rawContent.indexOf('{');
+        const e = rawContent.lastIndexOf('}');
+        if (s !== -1 && e !== -1) {
+          aiResponse = JSON.parse(rawContent.substring(s, e + 1));
+        } else {
+          aiResponse.reply = rawContent.trim();
+        }
+        console.log(`[${remoteJid}] 🤖 IA Response:`, JSON.stringify(aiResponse, null, 2));
+      } catch(e) { 
+        console.error(`[${remoteJid}] ❌ Erro Parse JSON AI:`, e.message);
+        aiResponse.reply = rawContent.trim() || "Pode repetir? Tive um pequeno erro de interpretação.";
       }
-      console.log(`[${remoteJid}] 🤖 IA Response:`, JSON.stringify(aiResponse, null, 2));
-    } catch(e) { 
-      console.error("Erro Parse JSON AI, usando rawContent como fallback");
-      aiResponse.reply = rawContent.trim() || "Tive um soluço técnico. Pode repetir?";
     }
 
     // 5. Execução de Ações
@@ -419,6 +431,11 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
             if (raw.includes("gastos") || raw.includes("divida") || raw.includes("débito") || raw.includes("contas") || raw.includes("despesa") || intent === "EXPENSE_QUERY") {
               const exps = await prisma.expense.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
               aiResponse.reply = formatExpensesByCategory(exps);
+            } else if (raw.includes("receita") || raw.includes("ganhos") || raw.includes("salario") || intent === "INCOME_QUERY") {
+              const incs = await prisma.income.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
+              aiResponse.reply = incs.length > 0 
+                ? `💰 *Suas Receitas:*\n\n` + incs.map(i => `• R$ ${i.amount.toFixed(2)} — ${i.description} (${i.category})`).join("\n")
+                : "Não encontrei registros de receitas. 📂";
             } else {
               const eSum = await prisma.expense.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
               const iSum = await prisma.income.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
