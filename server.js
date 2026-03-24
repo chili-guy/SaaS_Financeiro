@@ -402,7 +402,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
                   return `🔔 *${t.title}* - ${dateStr}`;
                 }).join("\n") 
               : "Sua lista de tarefas está zerada! 🎉";
-          } else if (intent === "EXPENSE_QUERY" || intent === "INCOME_QUERY" || intent === "UNKNOWN") {
+          } else if (intent === "EXPENSE_QUERY" || intent === "INCOME_QUERY") {
             const raw = msgText.toLowerCase();
             const dateFilter = raw.includes("mês passado") ? { gte: new Date(now.getFullYear(), now.getMonth() - 1, 1), lt: new Date(now.getFullYear(), now.getMonth(), 1) } : { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
             
@@ -417,7 +417,8 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
               aiResponse.reply = `📊 *Resumo ${raw.includes("passado") ? "do Mês Passado" : "Mensal"}:*\n\n💰 Receitas: R$ ${totalI.toFixed(2)}\n💸 Gastos: R$ ${totalE.toFixed(2)}`;
             }
           } else {
-            aiResponse.reply = "Pode me pedir para ver tarefas, gastos ou registrar algo!";
+            // UNKNOWN ou Fallback: Preserva a resposta original da IA para perguntas gerais
+            console.log(`[${remoteJid}] ❓ Intenção não mapeada. Usando resposta natural da IA.`);
           }
         } else if (action === "INCOME" && parsedData.amount) {
           const val = parseFloat(String(parsedData.amount).replace(',', '.').replace(/[^\d.]/g, ''));
