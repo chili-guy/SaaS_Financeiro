@@ -749,10 +749,18 @@ const server = http.createServer(async (req, res) => {
 
         if (buffer.timer) clearTimeout(buffer.timer);
         buffer.timer = setTimeout(() => {
-          const fullMsg = buffer.texts.join("\n");
-          const instance = (payload.instance?._id || payload.instance || "main");
-          messageBuffers.delete(remoteJid);
-          processNicoCore(remoteJid, fullMsg, instance);
+          const attemptProcess = () => {
+             if (userLocks.has(remoteJid)) {
+               console.log(`[${remoteJid}] ⏳ Sistema ocupado com este usuário. Re-agendando em 1.5s...`);
+               setTimeout(attemptProcess, 1500);
+               return;
+             }
+             const fullMsg = buffer.texts.join("\n");
+             const instance = (payload.instance?._id || payload.instance || "main");
+             messageBuffers.delete(remoteJid);
+             processNicoCore(remoteJid, fullMsg, instance);
+          };
+          attemptProcess();
         }, DEBOUNCE_TIME);
 
         return end200();
