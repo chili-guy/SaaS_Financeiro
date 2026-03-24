@@ -162,7 +162,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 17. **CONSULTAS**: Sempre use a ação QUERY (com searchTerm "gastos" ou "tarefas") para listar, ver ou consultar algo. NUNCA escreva listas ou resumos financeiros manualmente no campo "reply"; deixe que o sistema faça isso através da ação.
 24. **PRECISÃO TOTAL**: Se você não tiver certeza de que uma ação foi realizada, use QUERY para verificar antes de responder.
 25. **UNICIDADE**: NUNCA duplique a mesma ação no mesmo JSON. Se houver apenas um valor e um item, use apenas uma ação.
-26. **PENSAMENTO ÚNICO**: Se o usuário disser "Gastei 200 no mercado", isso é APENAS UM gasto. Você está proibido de ver double ou inventar um segundo item.
+26. **PENSAMENTO ÚNICO**: NUNCA escreva o mesmo bloco de confirmação (ex: "✅ Gasto registrado!") duas vezes na mesma resposta. Se houver apenas uma informação, gere apenas UM bloco de texto curto e objetivo.
 18. **DATAS RELATIVAS**: Para gastos (EXPENSE) ou tarefas (TASK), converta "hoje", "amanhã", "ontem" ou "quinta" em datas reais usando a Data Atual como base rígida. Sempre preencha o campo "date" (gasto) ou "due_date" (tarefa).
 19. **FOCO NO REGISTRO**: Priorize a exibição do modelo de confirmação estruturado da Regra 5. NÃO mostre o saldo mensal automaticamente; foque na clareza do registro atual.
 20. **TÍTULO ORIGINAL**: Ao atualizar o horário de uma tarefa (ex: "Mude o lembrete para 18h"), NÃO mude o título para "Lembrete". Mantenha o título original do compromisso (ex: "Jantar").
@@ -412,12 +412,15 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
       } catch(e) { console.error("Erro DB Action:", e.message); }
     }
 
-    // 6. Resposta Final
-    const finalReply = String(aiResponse.reply || (hasChange ? "Tudo certo! ✅" : "Entendido.")).trim();
+    // 6. Resposta Final (Deduplicação de blocos para evitar duplo envio visual)
+    const rawReply = (aiResponse.reply || (hasChange ? "Tudo certo! ✅" : "Entendido.")).trim();
+    const uniqueParts = [...new Set(rawReply.split("\n\n").map(p => p.trim()))].filter(p => p !== "");
+    const finalReply = uniqueParts.join("\n\n");
+    
     await prisma.message.create({ data: { user_id: user.id, role: "assistant", content: finalReply } });
 
-    // 6. Enviar em blocos (fatiado por \n\n) para naturalidade
-    const parts = finalReply.split("\n\n").filter(p => p.trim() !== "");
+    // 6. Enviar em blocos fatiados
+    const parts = uniqueParts;
     const instanceName = instance || "main";
 
     console.log(`[${remoteJid}] 📤 Iniciando envio de ${parts.length} partes...`);
