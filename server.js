@@ -50,6 +50,7 @@ Intenções possíveis:
 - TASK_QUERY (Consultar agenda, tarefas, compromissos, lembretes)
 - EXPENSE_QUERY (Consultar gastos, dívidas, boletos, faturas, financeiro)
 - INCOME_QUERY (Consultar ganhos, salários, depósitos)
+- DELETE (Apagar, limpar, excluir histórico, tarefas ou gastos)
 - UNKNOWN (Outros casos)
 
 Mensagem: "${msgText}"`;
@@ -257,7 +258,8 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 21. **AMBIGUIDADE**: Se for genérico, peça detalhes antes de agir.
 22. **SIGILO TÉCNICO**: Proibido usar termos como JSON, TASK, EXPENSE nas respostas.
 23. **UNICIDADE**: NUNCA duplique a mesma ação no mesmo turno.
-24. **PENSAMENTO ÚNICO**: Registre apenas um item por vez, a menos que haja valores claramente distintos.
+26. **PENSAMENTO ÚNICO**: Registre apenas um item por vez, a menos que haja valores claramente distintos.
+27. **AÇÃO REAL**: Se o usuário pedir para apagar ou limpar, você DEVE gerar a ação DELETE no JSON. NUNCA diga que limpou algo se a ação DELETE não estiver presente.
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
@@ -306,13 +308,22 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
     }
 
     // 5. Execução de Ações
-    const actions = aiResponse.actions || [];
     let hasChange = false;
+
+    // 5. Verificação de Segurança de Intenção (Garante que DELETE/QUERY não falhem se a IA travar)
+    const intent = await classifyIntent(msgText);
+    const aiActions = aiResponse.actions || [];
+    
+    // Se for DELETE e a IA "esqueceu" a ação, nós forçamos aqui
+    if (intent === "DELETE" && !aiActions.some(a => a.action === "DELETE")) {
+      console.log(`[${remoteJid}] 🛡️ Intent de DELETE detectada mas ação ausente. Forçando DELETE.`);
+      aiActions.push({ action: "DELETE", parsedData: { title: msgText } });
+    }
 
     // 5. Processamento das Ações (Deduplicação agressiva e Case-Insensitive)
     const uniqueActions = [];
     const seenActions = new Set();
-    for (const act of actions) {
+    for (const act of aiActions) {
       // Normalizamos a chave para evitar duplicidade por causa de maiúsculas/minúsculas ou espaços
       const cleanData = JSON.parse(JSON.stringify(act.parsedData));
       if (cleanData.description) cleanData.description = cleanData.description.toLowerCase().trim();
