@@ -140,53 +140,62 @@ function App() {
               <a onClick={() => setIsMenuOpen(false)} className="text-xl text-[#111827] hover:text-[#7C3AED]" href="#avaliacoes">Avaliações</a>
               <a onClick={() => setIsMenuOpen(false)} className="text-xl text-[#111827] hover:text-[#7C3AED]" href="#planos">Planos</a>
               <hr className="border-[#F1F5F9]" />
-              <a href="https://wa.me/assessornico" className="bg-[#22c55e] text-white py-4 rounded-full text-lg shadow-lg shadow-[#22c55e]/20">Começar Agora</a>
+              <a href="https://buy.stripe.com/test_cNi00k1fGeeg3gK0Sh93y01" className="bg-[#7C3AED] text-white py-4 rounded-full text-lg shadow-lg shadow-[#7C3AED]/20">Assinar Plano</a>
            </div>
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section className="relative pt-24 md:pt-40 pb-0 flex flex-col items-center justify-center text-center px-6 overflow-hidden bg-white" id="como-funciona">
-        <div className="max-w-[1000px] relative z-10 mx-auto flex flex-col items-center">
-          
-          {/* Top subtle text */}
-          <p className="text-[#7C3AED] text-[0.75rem] md:text-[0.9rem] font-body font-bold tracking-widest mb-6 uppercase">
+      <section className="relative pt-32 pb-20 overflow-hidden bg-white" id="como-funciona">
+        
+        <div className="container mx-auto px-6 relative z-10 flex flex-col items-center text-center">
+          <p className="text-[#7C3AED] font-body font-bold text-[0.65rem] md:text-[0.7rem] uppercase tracking-[0.2em] mb-8">
             Transforme seu WhatsApp em um Assessor Pessoal
           </p>
-          
-          {/* Main Headline (Responsive) */}
-          <h1 className="text-[2.2rem] sm:text-[2.8rem] md:text-[3.8rem] font-headline font-black leading-[1.1] md:leading-[1.05] tracking-tighter text-[#111827] mb-8">
-            Tenha um assessor pessoal <span className="md:block text-[#7C3AED]">trabalhando 24h</span> pra você
+
+          <h1 className="font-headline font-black text-[2.4rem] sm:text-[3.2rem] md:text-[4.5rem] lg:text-[5.5rem] leading-[1.05] text-[#111827] max-w-5xl mx-auto mb-10 tracking-[-0.03em]">
+            Tenha um assessor pessoal <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#7C3AED] via-[#9F67FF] to-[#7C3AED] animate-gradient-x">
+              trabalhando 24h
+            </span> 
+            <span className="inline-block relative">
+               &nbsp;pra você
+               <div className="absolute bottom-4 left-0 w-full h-[6px] md:h-[10px] bg-[#7C3AED]/10 -skew-x-12 -z-10"></div>
+            </span>
           </h1>
 
-          {/* 3 Detail Badges (Simplified on Mobile) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-16 justify-center w-full max-w-[850px]">
-            {/* Feature 1 */}
-            <div className="flex items-center gap-4 bg-[#F8FAFC] border border-[#F1F5F9] p-4 rounded-2xl text-left shadow-sm">
-              <span className="material-symbols-outlined text-[#eab308] text-2xl" style={{fontVariationSettings: "'FILL' 1"}}>verified_user</span>
-              <p className="font-headline font-bold text-[0.85rem] text-[#111827]">Criptografia de ponta-a-ponta</p>
-            </div>
-            {/* Feature 2 */}
-            <div className="flex items-center gap-4 bg-[#F8FAFC] border border-[#F1F5F9] p-4 rounded-2xl text-left shadow-sm border-l-4 border-l-[#7C3AED]">
-              <span className="material-symbols-outlined text-[#7C3AED] text-2xl" style={{fontVariationSettings: "'FILL' 1"}}>auto_awesome</span>
-              <p className="font-headline font-bold text-[0.85rem] text-[#111827]">IA treinada para Português</p>
-            </div>
-            {/* Feature 3 */}
-            <div className="flex items-center gap-4 bg-[#F8FAFC] border border-[#F1F5F9] p-4 rounded-2xl text-left shadow-sm">
-              <span className="material-symbols-outlined text-[#111827] text-2xl" style={{fontVariationSettings: "'FILL' 1"}}>edit_document</span>
-              <p className="font-headline font-bold text-[0.85rem] text-[#111827]">Edite mensagens via chat</p>
-            </div>
+          {/* Features Badges Group */}
+          <div className="flex flex-wrap justify-center gap-3 md:gap-4 mb-14 transition-all duration-300">
+            {[
+              { icon: 'verified_user', text: 'Criptografia de ponta-a-ponta' },
+              { icon: 'auto_awesome', text: 'IA treinada para Português' },
+              { icon: 'edit_document', text: 'Edite mensagens via chat' }
+            ].map((feature, idx) => (
+              <div key={idx} className="flex items-center gap-3 px-5 py-3.5 bg-white/70 border border-[#E2E8F0] backdrop-blur-md rounded-2xl shadow-sm hover:translate-y-[-2px] hover:shadow-md transition-all duration-300">
+                <span className="material-symbols-outlined text-[1.3rem] text-[#7C3AED] fill-none" style={{fontVariationSettings: "'FILL' 1"}}>{feature.icon}</span>
+                <span className="text-[#475569] font-body font-bold text-[0.7rem] uppercase tracking-wider">{feature.text}</span>
+              </div>
+            ))}
           </div>
 
-          {/* Green CTA Button  */}
-          <a href="https://wa.me/assessornico" className="group bg-[#22c55e] text-white font-headline font-black text-[1rem] px-14 py-5 rounded-full hover:bg-[#16a34a] hover:scale-[1.05] transition-all duration-300 shadow-[0_20px_40px_rgba(34,197,94,0.3)] mb-20 uppercase flex items-center justify-center gap-3 tracking-widest">
-            COMEÇAR AGORA
-            <span className="material-symbols-outlined font-black text-2xl group-hover:translate-x-1 transition-transform">arrow_forward</span>
-          </a>
+          <div className="flex flex-col items-center gap-6">
+            <a href="https://buy.stripe.com/test_cNi00k1fGeeg3gK0Sh93y01" className="group relative">
+               {/* Glow effect */}
+              <div className="absolute -inset-1 bg-gradient-to-r from-[#7C3AED] to-[#9F67FF] rounded-full blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
+              
+              <div className="relative flex items-center gap-3 bg-gradient-to-r from-[#7C3AED] to-[#9F67FF] text-white font-headline font-black text-[1rem] px-16 py-6 rounded-full hover:scale-[1.03] transition-all duration-300 shadow-xl uppercase tracking-widest">
+                ASSINAR AGORA
+                <span className="material-symbols-outlined font-black text-2xl group-hover:translate-x-1 transition-transform">arrow_forward</span>
+              </div>
+            </a>
+            
+            <p className="text-[#94A3B8] text-[0.7rem] font-body font-bold uppercase tracking-[0.2em] max-w-md leading-relaxed opacity-80">
+              * O Nico entrará em contato <span className="text-[#7C3AED]">imediatamente</span> via WhatsApp.
+            </p>
+          </div>
         </div>
 
         {/* Hero Phones - Uniform Tri-Mockup Layout */}
-        <div className="relative w-full max-w-7xl mx-auto h-auto z-10 flex flex-wrap justify-center gap-6 md:gap-12 px-4 items-center mb-12 md:mb-24 overflow-visible">
+        <div className="relative w-full max-w-7xl mx-auto h-auto z-10 flex flex-wrap justify-center gap-6 md:gap-12 px-4 items-center mb-12 md:mb-24 overflow-visible mt-12 md:mt-32">
           
           {/* Left Phone (Uniform Size) */}
           <div className="w-[300px] sm:w-[320px] z-10 hidden lg:block transition-all duration-500 hover:-translate-y-2 rounded-[2rem] shadow-[0_30px_60px_rgba(0,0,0,0.3)]">
@@ -196,7 +205,7 @@ function App() {
           </div>
           
           {/* Center Phone (Uniform Size) */}
-          <div className="w-full sm:w-[320px] z-20 transition-all duration-500 hover:-translate-y-2 rounded-[2.2rem] shadow-[0_40px_80px_rgba(0,0,0,0.4)] scale-[1.10] sm:scale-100">
+          <div className="w-[280px] sm:w-[320px] z-20 transition-all duration-500 hover:-translate-y-2 rounded-[2.2rem] shadow-[0_40px_80px_rgba(0,0,0,0.4)]">
               <div className="rounded-[2.2rem] bg-[#111] border-[6px] sm:border-[10px] border-[#222] overflow-hidden aspect-[9/19] relative">
                 <ChatMockup />
                 {/* Visual Glow */}
@@ -261,12 +270,7 @@ function App() {
                 Nossa inteligência artificial classifica automaticamente a categoria e extrai valores para o seu controle total em tempo real, sem que você precise abrir um app.
               </p>
             </div>
-            <div className="pt-4 flex flex-wrap gap-4">
-              <a href="https://wa.me/assessornico" className="bg-[#7C3AED] text-white px-10 py-4 rounded-full font-headline font-bold text-[0.95rem] hover:bg-[#4C1D95] transition-all duration-300 transform active:scale-95 shadow-xl shadow-[#7C3AED]/20 uppercase tracking-widest flex items-center gap-3">
-                TESTAR AGORA
-                <span className="material-symbols-outlined text-lg">arrow_forward</span>
-              </a>
-            </div>
+
           </div>
           
           {/* Visual Content: Abstract Finance */}
@@ -530,8 +534,8 @@ function App() {
                 </ul>
 
                 <div className="w-full">
-                  <a href="https://wa.me/assessornico?text=Quero%20assinar%20o%20plano" className="block w-full bg-[#22c55e] text-white text-center font-headline font-bold text-[1.1rem] py-5 rounded-full hover:bg-[#16a34a] transition-all duration-300 shadow-[0_15px_30px_rgba(34,197,94,0.3)] mb-4">
-                     Garanta Já
+                  <a href="https://buy.stripe.com/test_cNi00k1fGeeg3gK0Sh93y01" className="block w-full bg-[#22c55e] text-white text-center font-headline font-bold text-[1.1rem] py-5 rounded-full hover:bg-[#16a34a] transition-all duration-300 shadow-[0_15px_30px_rgba(34,197,94,0.3)] mb-4">
+                     CONTRATAR AGORA
                   </a>
                   
                   <p className="w-full text-center text-[#9ca3af] text-[10px] font-body font-bold uppercase tracking-widest opacity-70">
@@ -631,10 +635,9 @@ function App() {
           </div>
           
           <div className="mt-16 text-center">
-             <p className="text-[#64748B] font-body mb-6 font-medium text-lg">Ainda tem dúvidas? Fale com suporte humano.</p>
-             <a href="https://wa.me/assessornico?text=Tenho%20d%C3%BAvidas" className="inline-flex items-center gap-3 bg-white text-[#111827] font-headline font-bold px-10 py-4 rounded-full hover:bg-[#e2e8f0] transition-colors border border-[#cbd5e1] shadow-sm tracking-wide text-sm">
-               <span className="material-symbols-outlined text-[#22c55e] text-xl">support_agent</span>
-               FALAR COM ATENDENTE
+             <p className="text-[#64748B] font-body mb-6 font-medium text-lg italic">O Nico já está pronto para te atender.</p>
+             <a href="https://buy.stripe.com/test_cNi00k1fGeeg3gK0Sh93y01" className="inline-flex items-center gap-3 bg-[#7C3AED] text-white font-headline font-bold px-12 py-5 rounded-full hover:bg-[#6D28D9] transition-all shadow-xl shadow-[#7C3AED]/20 tracking-widest uppercase">
+               CONTRATAR MEU NICO
              </a>
           </div>
         </div>
