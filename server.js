@@ -143,11 +143,23 @@ async function processNicoCore(remoteJid, msgText, instance) {
 
   try {
     // 1. Controle de Assinante (Apenas para Pagos ou Trial via Stripe)
-    let user = await prisma.user.findUnique({ where: { phone_number: remoteJid } });
+    // Inteligência de busca: Tenta encontrar o usuário com ou sem o nono dígito (Brasil)
+    let phoneNo9 = remoteJid.replace(/^55(\d{2})9/, '55$1');
+    let phoneWith9 = remoteJid.replace(/^55(\d{2})(\d{8})@/, '55$19$2@');
+    
+    let user = await prisma.user.findFirst({ 
+      where: { 
+        OR: [
+          { phone_number: remoteJid },
+          { phone_number: phoneNo9 },
+          { phone_number: phoneWith9 }
+        ]
+      } 
+    });
     
     // Se o usuário não existe ou não está ativo, bloqueamos o acesso
     if (!user || user.status !== "ACTIVE") {
-      // Se não existe, criamos como INACTIVE para logar tentativas
+      // Se não existe mas é um número novo, criamos como INACTIVE
       if (!user) {
         user = await prisma.user.create({ data: { phone_number: remoteJid, status: "INACTIVE" } });
       }
@@ -730,11 +742,25 @@ const server = http.createServer(async (req, res) => {
 
             console.log(`[STRIPE Webhook] 💰 Ativando acesso para: ${cleanPhone}`);
             
-            await prisma.user.upsert({
-              where: { phone_number: cleanPhone },
-              update: { status: 'ACTIVE' },
-              create: { phone_number: cleanPhone, status: 'ACTIVE' }
+            // Busca se já existe um usuário com esse número ou variações de 9 dígito
+            const cPhoneNo9 = cleanPhone.replace(/^55(\d{2})9/, '55$1');
+            const cPhoneWith9 = cleanPhone.replace(/^55(\d{2})(\d{8})@/, '55$19$2@');
+
+            const existingUser = await prisma.user.findFirst({
+              where: {
+                OR: [
+                  { phone_number: cleanPhone },
+                  { phone_number: cPhoneNo9 },
+                  { phone_number: cPhoneWith9 }
+                ]
+              }
             });
+
+            if (existingUser) {
+              await prisma.user.update({ where: { id: existingUser.id }, data: { status: 'ACTIVE' } });
+            } else {
+              await prisma.user.create({ data: { phone_number: cleanPhone, status: 'ACTIVE' } });
+            }
             
             // Notificar usuário via WhatsApp
             const instance = process.env.INSTANCE || "main";
