@@ -47,12 +47,14 @@ async function classifyIntent(msgText) {
     const prompt = `Classifique a intenção do usuário baseado na mensagem. Responda APENAS um JSON válido no formato: { "intent": "..." }. 
 
 Intenções possíveis:
-- TASK_QUERY (Listar, ver, mostrar, dizer o que tem na agenda/lembretes. EXCLUIR se o usuário estiver pedindo para anotar algo agora)
-- EXPENSE_QUERY (Ver gastos, quanto gastei, lista de dívidas, financeiro)
-- INCOME_QUERY (Ver ganhos, extrato de receitas)
-- SUMMARY_QUERY (Resumo geral, balanço do mês, como estou hoje)
-- DELETE (Apagar tudo, limpar histórico, excluir)
-- UNKNOWN (Outros casos)
+- TASK_QUERY (Apenas para LISTAR ou VER a agenda. EXCLUIR se o usuário estiver pedindo para anotar algo agora)
+- EXPENSE_QUERY (Ver gastos, extratos, relatórios)
+- INCOME_QUERY (Ver ganhos)
+- SUMMARY_QUERY (Resumo do mês)
+- DELETE (Resetar ou apagar dados)
+- UNKNOWN (Perguntas gerais ou conversas)
+
+IMPORTANTE: "Me lembre de X" ou "Anota aí Y" NUNCA são TASK_QUERY. São comandos de ação.
 
 Mensagem: "${msgText}"`;
 
@@ -224,10 +226,10 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 - Histórico de Receitas: ${myIncStr}
 
 ### REGRAS DE COMPORTAMENTO (ESTRITAS):
-1. **SAUDAÇÃO CALOROSA**: Se o usuário saudar (Oi, Ola, etc.), seja cordial. Se for a PRIMEIRA vez que ele fala (veja msgCount), apresente-se como o Assessor Nico de forma completa. Se já estiverem conversando, responda de forma breve, amigável e natural. NUNCA responda apenas com "Entendido".
-2. **ZERO ALUCINAÇÃO**: Se o usuário perguntar por algo, olhe APENAS os "REGISTROS INTERNOS". Se não estiver lá, diga "Não encontrei esse registro".
-3. **PENSAMENTO ECONÔMICO**: Diferencie "registrei um gasto" (EXPENSE) de "criei uma tarefa" (TASK).
-5. **MODELO DE CONFIRMAÇÃO**: Use SEMPRE este padrão visual para confirmar qualquer registro (Financeiro ou Agenda):
+1. **FOCO EM AÇÃO**: Sua prioridade #1 é registrar dados. Se o usuário mandar um comando (Gastar, Lembrar, Salário), foque TOTALMENTE em executar a ação e dar a confirmação visual. Responda de forma curta e prática.
+2. **SAUDAÇÃO INTELIGENTE**: Só se apresente como "Assessor Nico" de forma completa se for a primeira vez que fala com o usuário (msgCount <= 1). Nas mensagens seguintes, seja breve e natural (ex: "Opa! Anotado aqui." ou "Claro, o que mais?"). NUNCA repita sua bio completa.
+3. **ZERO ALUCINAÇÃO**: Se o usuário perguntar por algo, olhe APENAS os "REGISTROS INTERNOS". Se não estiver lá, diga "Não encontrei esse registro".
+4. **MODELO DE CONFIRMAÇÃO**: Use SEMPRE o padrão visual (emoji + descrição + valor/data) para confirmações.
 ✅ [Gasto/Entrada/Tarefa] registrado!
 
 📝 [Descrição/Título]: [texto exato do usuário, ex: "mercado"]
@@ -805,16 +807,10 @@ const server = http.createServer(async (req, res) => {
         const msgNode = payload.data?.message || payload.data;
         let msgText = msgNode.conversation || msgNode.extendedTextMessage?.text || msgNode.imageMessage?.caption || "";
         
-        // Tratamento de Resposta de Botão
-        const btnRes = msgNode.buttonsResponseMessage || msgNode.templateButtonReplyMessage;
-        if (btnRes) {
-          const btnId = btnRes.selectedButtonId || btnRes.selectedId;
-          if (btnId === "confirm_task") msgText = "Quero ver minhas tarefas pendentes";
-          if (btnId === "done_last") msgText = "Concluir minha última tarefa";
-          console.log(`[${remoteJid}] 🔘 Botão clicado: ${btnId} -> Interpretado como: ${msgText}`);
-        }
+        // FILTRO DE RUÍDO (QA): Remove prefixos de teste e metadados que confundem a IA
+        msgText = msgText.replace(/\[TESTE \d+\/\d+\]/gi, '').replace(/^G\d+\s*·\s*[^\n]+\n?/i, '').replace(/^=/, '').trim();
 
-        if (!msgText.trim()) return end200();
+        if (!msgText) return end200();
 
         // DEBOUNCE LOGIC
         if (!messageBuffers.has(remoteJid)) messageBuffers.set(remoteJid, { texts: [], timer: null });
