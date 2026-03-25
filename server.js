@@ -152,7 +152,7 @@ async function processNicoCore(remoteJid, msgText, instance) {
         user = await prisma.user.create({ data: { phone_number: remoteJid, status: "INACTIVE" } });
       }
 
-      const blockMsg = `Olá! Sou o Nico, seu Assessor Financeiro. 🤖📈\n\nNotei que você ainda não ativou sua assinatura. Para ter acesso à minha inteligência para organizar seus gastos e tarefas, você precisa garantir sua vaga na nossa página oficial.\n\n🎁 *DETALHE:* Você ganha 30 DIAS TOTALMENTE GRÁTIS! Só é cobrado após o primeiro mês.\n\n🔗 *Garanta seu acesso agora:* https://assensornico.com\n\n_Assim que concluir o cadastro, seu acesso será liberado aqui no WhatsApp automaticamente!_`;
+      const blockMsg = `Olá! Sou o Nico, seu Assessor Financeiro. 🤖📈\n\nNotei que você ainda não ativou sua assinatura. Para ter acesso à minha inteligência para organizar seus gastos e tarefas, você precisa garantir sua vaga na nossa página oficial.\n\n🎁 *DETALHE:* Você ganha 30 DIAS TOTALMENTE GRÁTIS! Só é cobrado após o primeiro mês.\n\n🔗 *Garanta seu acesso agora:* https://www.nicoassessor.com/\n\n_Assim que concluir o cadastro, seu acesso será liberado aqui no WhatsApp automaticamente!_`;
 
       await sendText(remoteJid, blockMsg, instance || "main");
       return;
@@ -718,8 +718,14 @@ const server = http.createServer(async (req, res) => {
           let phone = session.client_reference_id || session.metadata?.whatsapp || session.customer_details?.phone;
           
           if (phone) {
-            // Limpa o número (remove caracteres não numéricos e garante @s.whatsapp.net)
+            // Limpa o número (remove caracteres não numéricos)
             let cleanPhone = phone.replace(/[^\d]/g, '');
+            
+            // Inteligência para números BR: Se tiver 10 ou 11 dígitos, adiciona o 55
+            if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith("55")) {
+              cleanPhone = `55${cleanPhone}`;
+            }
+
             if (!cleanPhone.includes("@s.whatsapp.net")) cleanPhone = `${cleanPhone}@s.whatsapp.net`;
 
             console.log(`[STRIPE Webhook] 💰 Ativando acesso para: ${cleanPhone}`);
@@ -755,8 +761,13 @@ const server = http.createServer(async (req, res) => {
         if (payload.event !== "messages.upsert") return end200();
 
         const dataKey = payload.data?.key || payload.data?.message?.key || {};
-        const remoteJid = dataKey.remoteJid || "";
+        let remoteJid = dataKey.remoteJid || "";
         const msgId     = dataKey.id || "";
+
+        // Normalização de JID (Remove sufixos de multiconta :1 :2 etc)
+        if (remoteJid.includes(":")) {
+          remoteJid = remoteJid.split(":")[0] + "@s.whatsapp.net";
+        }
 
         if (dataKey.fromMe || !remoteJid || remoteJid.includes("@g.us")) return end200();
         if (processedIds.has(msgId)) return end200(); // Ignora duplicatas
