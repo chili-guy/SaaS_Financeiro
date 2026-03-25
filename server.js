@@ -209,8 +209,9 @@ NUNCA use gírias como "chefe", "mano", "bora", "show", nem exageros informais. 
 8. **CATEGORIZAÇÃO**: Atribua sempre uma categoria lógica aos gastos (EXPENSE).
 10. **MÚLTIPLOS PEDIDOS**: Gere uma "action" separada para cada um deles.
 11. **SEM REPETIÇÃO**: Se for apenas uma confirmação curta como "Ok", responda apenas com texto.
-12. **COMANDO DELETE**: Se o usuário pedir para limpar ou excluir, use DELETE.
-15. **AGENDAMENTO**: Se houver intenção de lembrete, use TASK com "remind: true".
+12. **COMANDO DELETE**: Se o usuário pedir para "limpar tudo", "apagar histórico" ou "resetar", use a ação DELETE. NUNCA use DELETE para marcar uma tarefa como feita.
+13. **CONCLUIR TAREFA (DONE)**: Se o usuário disser "concluí", "feito", "já fiz", "finalizei", use obrigatoriamente a ação DONE com o título da tarefa no parsedData.
+15. **AGENDAMENTO**: Se houver intenção de lembrete (ex: "me lembre", "anote aí", "marcar reunião"), use TASK com "remind: true".
 31. **CONVERSA LIVRE E OBRIGATÓRIA**: Você é um assessor com personalidade! O campo 'reply' NUNCA deve ficar vazio. Se o usuário fizer uma pergunta casual ("quem eu sou?", "tudo bem?"), responda de forma natural e proativa usando o nome dele (que está no Contexto Atual).
 32. **INTELIGÊNCIA DE INTENÇÃO**: Frases como "o que vou fazer hoje?", "meus compromissos", "minha agenda" ou "quais minhas tarefas?" significam que o usuário quer ver a agenda. Você DEVE gerar a ação QUERY com type "TASKS" e escrever no 'reply' algo como "Deixa comigo, fui buscar sua agenda:"
 33. **PERSONALIDADE NATURAL**: Seja cordial como um gerente premium. Se o Contexto Atual indicar que o nome do usuário é "NÃO INFORMADO", NUNCA use codinomes ou títulos genéricos como "Prezado", "Investidor", "Chefe", "Mano", "Amigo", etc. Apenas inicie a frase de forma educada e direta (ex: "Claro, registrei seu gasto..." ao invés de "Claro, Prezado..."). Se você souber o nome real do usuário, use-o com moderação (no máximo uma vez por resposta).
@@ -227,6 +228,7 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
     { "action": "INCOME", "parsedData": { "amount": float, "description": "string", "category": "string", "date": "ISO-DATE | null" } },
     { "action": "QUERY", "parsedData": { "type": "TASKS | EXPENSES | INCOMES | SUMMARY" } },
     { "action": "DELETE", "parsedData": {} },
+    { "action": "DONE", "parsedData": { "title": "string" } },
     { "action": "SUBSCRIBE", "parsedData": {} },
     { "action": "TOGGLE_ALARM", "parsedData": { "target": "string ou 'todos'", "active": boolean } }
   ],
@@ -391,23 +393,33 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
         }
         else if (action === "DELETE") {
            const raw = msgText.toLowerCase();
-           if (raw.includes("tudo") || raw.includes("reset")) {
+           if (raw.includes("tudo") || raw.includes("reset") || raw.includes("limpar agenda") || raw.includes("apagar histórico")) {
               await prisma.task.deleteMany({ where: { user_id: user.id } });
               await prisma.expense.deleteMany({ where: { user_id: user.id } });
-              aiResponse.reply = "🗑️ *RESET COMPLETO!* Removi tudo.";
-           } else if (raw.includes("gasto") || raw.includes("financeiro")) {
+              aiResponse.reply = "🗑️ RESET COMPLETO! Removi todos os registros conforme solicitado.";
+              hasChange = true;
+           } else if (raw.includes("limpar gasto") || raw.includes("limpar financeiro")) {
               await prisma.expense.deleteMany({ where: { user_id: user.id } });
-              aiResponse.reply = "🗑️ *FINANCEIRO LIMPO!*";
+              aiResponse.reply = "🗑️ FINANCEIRO LIMPO! Seus registros de gastos e receitas foram removidos.";
+              hasChange = true;
            } else {
-              await prisma.task.deleteMany({ where: { user_id: user.id } });
-              aiResponse.reply = "🗑️ *TAREFAS LIMPAS!*";
+              console.log(`[${remoteJid}] 🔎 Ignorando DELETE genérico (segurança).`);
            }
-           hasChange = true;
         }
         else if (action === "DONE") {
-          const task = await prisma.task.findFirst({ where: { user_id: user.id, completed: false, title: { contains: parsedData.title || "", mode: 'insensitive' } } });
+          const taskName = parsedData.title || "";
+          const task = await prisma.task.findFirst({ 
+            where: { user_id: user.id, completed: false, title: { contains: taskName, mode: 'insensitive' } },
+            orderBy: { created_at: 'desc' }
+          });
+          
           if (task) {
             await prisma.task.update({ where: { id: task.id }, data: { completed: true } });
+            aiResponse.reply = (aiResponse.reply ? aiResponse.reply + "\n\n" : "") + 
+              `✅ Tarefa finalizada!\n\n📝 Título: ${task.title}\n🏆 Status: Concluída`;
+            hasChange = true;
+          } else {
+            console.log(`[${remoteJid}] ⚠️ Nenhuma tarefa encontrada para concluir: ${taskName}`);
           }
         }
         else if (action === "SUBSCRIBE") {
