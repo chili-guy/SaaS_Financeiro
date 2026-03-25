@@ -77,12 +77,12 @@ function formatFinanceRecords(records, type = "EXPENSE") {
   });
 
   const sorted = Object.entries(groups).sort((a,b) => b[1].total - a[1].total);
-  let reply = type === "EXPENSE" ? "💸 *Seus Gastos por Categoria:*\n\n" : "💰 *Suas Receitas por Categoria:*\n\n";
+  let reply = type === "EXPENSE" ? "💸 Seus Gastos por Categoria:\n\n" : "💰 Suas Receitas por Categoria:\n\n";
 
   for (const [cat, data] of sorted) {
     const emoji = catEmojis[cat] || (type === "EXPENSE" ? "📦" : "💵");
     const pct = totalAll > 0 ? ((data.total / totalAll) * 100).toFixed(0) : 0;
-    reply += `${emoji} *${cat}* (${pct}%)\n`;
+    reply += `${emoji} ${cat} (${pct}%)\n`;
     data.items.forEach(i => {
       reply += `• R$ ${i.amount.toFixed(2)} — ${i.description}\n`;
     });
@@ -90,7 +90,7 @@ function formatFinanceRecords(records, type = "EXPENSE") {
   }
 
   reply += "━━━━━━━━━━━━━━━\n";
-  reply += `✨ *Total Geral: R$ ${totalAll.toFixed(2)}*`;
+  reply += `✨ Total Geral: R$ ${totalAll.toFixed(2)}`;
   return reply;
 }
 
@@ -215,6 +215,7 @@ NUNCA use gírias como "chefe", "mano", "bora", "show", nem exageros informais. 
 32. **INTELIGÊNCIA DE INTENÇÃO**: Frases como "o que vou fazer hoje?", "meus compromissos", "minha agenda" ou "quais minhas tarefas?" significam que o usuário quer ver a agenda. Você DEVE gerar a ação QUERY com type "TASKS" e escrever no 'reply' algo como "Deixa comigo, fui buscar sua agenda:"
 33. **SEJA NATURAL**: Ao confirmar ações ou enviar relatórios, não seja um robô. Adicione comentários curtos e humanos no campo 'reply' (ex: "Anotado, chefe!", "Mais um gasto registrado, cuidado com o limite rs"). 
 34. **CANCELAR LEMBRETE**: Se o usuário pedir para "cancelar o alarme" ou "tirar o lembrete" (mas manter a tarefa na agenda), use a ação TOGGLE_ALARM. O target pode ser "todos" (para todos os lembretes) ou o título específico da tarefa.
+35. **SEM ASTERISCOS**: NUNCA use o caractere asterisco (*) para negrito, itálico ou qualquer tipo de formatação. Escreva o texto limpo, sem o caractere *.
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuário disse apenas "oi"), retorne a lista de actions VAZIA [], mas PREENCHA o reply.
@@ -337,10 +338,10 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
 
           if (queryType === "TASKS") {
             const list = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, orderBy: { due_date: 'asc' } });
-            queryResultText = list.length > 0 ? `📅 *Sua Agenda:*\n\n` + list.map(t => {
-                if (!t.due_date) return `🔔 *${t.title}*`;
+            queryResultText = list.length > 0 ? `📅 Sua Agenda:\n\n` + list.map(t => {
+                if (!t.due_date) return `🔔 ${t.title}`;
                 const d = new Date(t.due_date);
-                return `🔔 *${t.title}* - ${d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}`;
+                return `🔔 ${t.title} - ${d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}`;
             }).join("\n") : "Sua lista de tarefas está zerada para hoje! 🎉";
           } 
           else if (queryType === "EXPENSES") {
@@ -355,7 +356,7 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
             const tasks = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, take: 5 });
             const eSum = await prisma.expense.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
             const iSum = await prisma.income.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
-            queryResultText = `✨ *Seu Resumo Geral* ✨\n\n💰 Receitas: R$ ${(iSum._sum.amount || 0).toFixed(2)}\n💸 Gastos: R$ ${(eSum._sum.amount || 0).toFixed(2)}\n📋 Tarefas pendentes: ${tasks.length}`;
+            queryResultText = `✨ Seu Resumo Geral ✨\n\n💰 Receitas: R$ ${(iSum._sum.amount || 0).toFixed(2)}\n💸 Gastos: R$ ${(eSum._sum.amount || 0).toFixed(2)}\n📋 Tarefas pendentes: ${tasks.length}`;
           }
 
           // A MÁGICA ACONTECE AQUI: Junta a fala natural da IA com os dados puxados do banco!
