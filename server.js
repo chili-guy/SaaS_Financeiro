@@ -210,7 +210,7 @@ NUNCA use gírias como "chefe", "mano", "bora", "show", nem exageros informais. 
 10. **MÚLTIPLOS PEDIDOS**: Gere uma "action" separada para cada um deles.
 11. **SEM REPETIÇÃO**: Se for apenas uma confirmação curta como "Ok", responda apenas com texto.
 12. **COMANDO DELETE**: Se o usuário pedir para "apagar", "remover", "excluir" ou "cancelar" um registro específico (ex: "apague o gasto do uber"), use a ação DELETE com parsedData: { "type": "EXPENSES | TASKS | INCOMES", "target": "descrição" }. Se ele quiser "limpar tudo" ou "resetar", use { "type": "ALL" }.
-13. **CONCLUIR TAREFA (DONE)**: Se o usuário disser "concluí", "feito", "já fiz", "finalizei", use obrigatoriamente a ação DONE com o título da tarefa no parsedData.
+13. **CONCLUIR TAREFA (DONE)**: Se o usuário disser "concluí", "concluir", "finalizar", "finalizado", "feito", "já fiz", "finalizei", "terminei", use obrigatoriamente a ação DONE com o título da tarefa no parsedData.
 15. **AGENDAMENTO**: Se houver intenção de lembrete (ex: "me lembre", "anote aí", "marcar reunião"), use TASK com "remind: true".
 31. **CONVERSA LIVRE E OBRIGATÓRIA**: Você é um assessor com personalidade! O campo 'reply' NUNCA deve ficar vazio. Se o usuário fizer uma pergunta casual ("quem eu sou?", "tudo bem?"), responda de forma natural e proativa usando o nome dele (que está no Contexto Atual).
 32. **INTELIGÊNCIA DE INTENÇÃO**: Frases como "o que vou fazer hoje?", "meus compromissos", "minha agenda" ou "quais minhas tarefas?" significam que o usuário quer ver a agenda. Você DEVE gerar a ação QUERY com type "TASKS" e escrever no 'reply' algo como "Deixa comigo, fui buscar sua agenda:"
@@ -437,7 +437,7 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
                      `🗑️ Tarefa excluída!\n\n📝 Título: ${task.title}`;
                    hasChange = true;
                 }
-              } else if (raw.includes("limpar") || raw.includes("todas")) {
+              } else if (raw.includes("limpar todas") || raw.includes("deletar tudo") || raw.includes("excluir agenda")) {
                 await prisma.task.deleteMany({ where: { user_id: user.id } });
                 aiResponse.reply = "🗑️ TAREFAS LIMPAS! Sua agenda foi zerada.";
                 hasChange = true;
