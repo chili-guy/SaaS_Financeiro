@@ -266,6 +266,8 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 28. **CRITÉRIO DE REGISTRO**: Priorize o silêncio técnico. Só gere ações se houver um VERBO ou VALOR claros (ex: "Anotar", "Agendar", "Gastei"). Em caso de dúvida, pergunte: "Gostaria que eu registrasse isso na sua agenda ou finanças?".
 29. **CONCLUIR TAREFA**: Se o usuário disser que concluiu, fez, finalizou ou terminou uma tarefa, use a ação DONE com o título exato da tarefa. 
 30. **LIMPEZA DE DUPLICATAS**: Se o usuário pedir para "organizar", "limpar duplicatas" ou "deduplicar", use a ação CLEANUP.
+31. **CONVERSA LIVRE**: Se o usuário perguntar algo que não seja um comando (ex: "quando é meu médico?"), você DEVE usar o campo 'reply' para responder naturalmente baseado na Agenda/Gastos recebidos. NUNCA deixe o 'reply' vazio se houver dúvida.
+32. **STATUS DO ALARME**: Ao confirmar um agendamento, diga no 'reply': "Considerei para amanhã às 12:00". Se perguntado "quando", verifique a Agenda injetada.
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
@@ -293,7 +295,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
       body: JSON.stringify({
         model: "deepseek-chat",
         messages: [{ role: "system", "content": sysPrompt }, ...memory, { role: "user", "content": msgText }],
-        temperature: 0.1,
+        temperature: 0.6,
         response_format: { type: "json_object" } 
       }),
       signal: controller.signal
@@ -584,7 +586,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
     // 6. Resposta Final (Deduplicação e Tratamento de Listas)
     const isReturningUser = history.length > 0;
     const fallbackMsg = isReturningUser 
-      ? "Desculpe, não entendi bem essa última. Pode reformular? 🚀"
+      ? "Desculpe, não entendi bem. Como tenho acesso às suas tarefas e gastos, pode reformular a pergunta ou pedir um resumo? 🚀"
       : "Olá! Sou seu Assessor Nico. Como posso te ajudar com suas finanças ou tarefas hoje? 🚀";
     
     const rawReply = (aiResponse.reply || (hasChange ? "Tudo certo! ✅" : fallbackMsg)).trim();
