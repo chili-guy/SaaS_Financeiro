@@ -142,6 +142,7 @@ async function processNicoCore(remoteJid, msgText, instance) {
   userLocks.add(remoteJid);
 
   try {
+    const now = new Date();
     // 1. Controle de Assinante (Apenas para Pagos ou Trial via Stripe)
     // Inteligência de busca: Tenta encontrar o usuário com ou sem o nono dígito (Brasil)
     let phoneNo9 = remoteJid.replace(/^55(\d{2})9/, '55$1');
