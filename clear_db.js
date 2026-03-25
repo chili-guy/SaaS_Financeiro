@@ -20,6 +20,9 @@ async function main() {
     await prisma.note.deleteMany({});
     console.log("✅ Notas removidas.");
     
+    await prisma.income.deleteMany({});
+    console.log("✅ Receitas removidas.");
+    
     await prisma.user.deleteMany({});
     console.log("✅ Usuários removidos.");
 
