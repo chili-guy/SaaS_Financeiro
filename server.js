@@ -21,6 +21,8 @@ const stripe               = new Stripe(STRIPE_KEY);
 
 const STRIPE_PRICE_ID      = process.env.STRIPE_PRICE_ID || "price_...";
 const APP_URL              = process.env.APP_URL || "http://localhost:3000";
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
+const RESET_SECRET         = process.env.RESET_SECRET || "";
 
 // --- Buffer de Mensagens (QA: Debounce para evitar múltiplas notificações) ---
 const messageBuffers = new Map();
@@ -51,10 +53,10 @@ Intenções possíveis:
 - EXPENSE_QUERY (Ver gastos, extratos, relatórios)
 - INCOME_QUERY (Ver ganhos)
 - SUMMARY_QUERY (Resumo do mês)
-- DELETE (Resetar ou apagar dados)
-- UNKNOWN (Perguntas gerais ou conversas)
+- DELETE (Apagar, limpar, excluir dados. NÃO use para negativas como "não ative" ou "pare com isso")
+- UNKNOWN (Conversas gerais, negativas de ação ou perguntas)
 
-IMPORTANTE: "Me lembre de X" ou "Anota aí Y" NUNCA são TASK_QUERY. São comandos de ação.
+IMPORTANTE: Frases como "não ative o lembrete" ou "não quero alarme" são UNKNOWN ou comandos de configuração, NUNCA DELETE.
 
 Mensagem: "${msgText}"`;
 
@@ -195,12 +197,14 @@ async function processNicoCore(remoteJid, msgText, instance) {
       ? pendingTasks.map(t => `- ${t.title}${t.due_date ? ` [DATA: ${t.due_date.toLocaleString("pt-BR", {timeZone: "America/Sao_Paulo"})}]` : " [SEM DATA]"}`).join("\n") 
       : "Nenhuma pendente";
 
-    const myExpStr   = expenses.length > 0 
-      ? expenses.map(e => `- R$${e.amount} em ${e.description} (${e.category}) [DATA: ${e.date.toISOString()}]`).join("\n") 
+    const fmtDate = (d) => new Date(d).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric" });
+
+    const myExpStr = expenses.length > 0 
+      ? expenses.map(e => `- R$${e.amount} em ${e.description} (${e.category}) [DATA: ${fmtDate(e.date)}]`).join("\n") 
       : "Nenhum gasto recente";
       
-    const myIncStr   = incomes.length > 0 
-      ? incomes.map(i => `- R$${i.amount} em ${i.description} (${i.category}) [DATA: ${i.date.toISOString()}]`).join("\n") 
+    const myIncStr = incomes.length > 0 
+      ? incomes.map(i => `- R$${i.amount} em ${i.description} (${i.category}) [DATA: ${fmtDate(i.date)}]`).join("\n") 
       : "Nenhuma receita recente";
 
     const dataAtual  = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
@@ -209,7 +213,6 @@ async function processNicoCore(remoteJid, msgText, instance) {
 
     const msgCount  = await prisma.message.count({ where: { user_id: user.id } });
     const isFirst   = msgCount <= 1;
-    const isPaying  = /pagar|assinar|assinatura|checkout|pix/i.test(msgText);
 
     const sysPrompt = `### IDENTIDADE
 Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dívidas", "Contas" e "Gastos" são a mesma coisa. Você é um parceiro que simplifica a vida financeira do usuário.
@@ -217,6 +220,8 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 ### CONTEXTO ATUAL (VERDADE ABSOLUTA)
 - Data/Hora: ${dataAtual}
 - Status da Assinatura: ASSINANTE PRO (Acesso Liberado)
+- Primeira Interação: ${isFirst ? 'SIM — apresente-se completamente' : 'NÃO — seja direto e informal'}
+- Total de mensagens trocadas: ${msgCount}
 - Usuário: ${user.name && user.name !== "Nico User" ? user.name : "Investidor"}
 
 ### REGISTROS INTERNOS (PARA SEU CONHECIMENTO):
@@ -227,7 +232,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 
 ### REGRAS DE COMPORTAMENTO (ESTRITAS):
 1. **FOCO EM AÇÃO**: Sua prioridade #1 é registrar dados. Se o usuário mandar um comando (Gastar, Lembrar, Salário), foque TOTALMENTE em executar a ação e dar a confirmação visual. Responda de forma curta e prática.
-2. **SAUDAÇÃO INTELIGENTE**: Só se apresente como "Assessor Nico" de forma completa se for a primeira vez que fala com o usuário (msgCount <= 1). Nas mensagens seguintes, seja breve e natural (ex: "Opa! Anotado aqui." ou "Claro, o que mais?"). NUNCA repita sua bio completa.
+2. **SAUDAÇÃO INTELIGENTE**: ${isFirst ? 'Esta é a PRIMEIRA mensagem deste usuário. Apresente-se completamente como Assessor Nico.' : 'NÃO é a primeira mensagem (total: ' + msgCount + '). Seja breve e natural. NUNCA repita sua bio completa.'}
 3. **ZERO ALUCINAÇÃO**: Se o usuário perguntar por algo, olhe APENAS os "REGISTROS INTERNOS". Se não estiver lá, diga "Não encontrei esse registro".
 4. **MODELO DE CONFIRMAÇÃO**: Use SEMPRE o padrão visual (emoji + descrição + valor/data) para confirmações.
 ✅ [Gasto/Entrada/Tarefa] registrado!
@@ -239,7 +244,6 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 6. **EMOJIS**: Use emojis de forma moderada e estratégica para dar vida à conversa (ex: 💰 para finanças, ✅ para confirmações, 🔔 para avisos). Máximo 1 por parágrafo. Seja elegante.
 7. **INSTRUÇÃO PROATIVA**: Para comandos vagos, dê um exemplo útil (ex: "Pode me mandar seus gastos ou pedir para eu lembrar de algo!").
 8. **CATEGORIZAÇÃO**: Atribua sempre uma categoria lógica aos gastos (EXPENSE).
-9. **SEM NEGRITOS**: Proibido usar "*" ou "**". Texto 100% limpo.
 10. **MÚLTIPLOS PEDIDOS**: Se a mensagem contiver vários pedidos (ex: várias tarefas ou gastos), você DEVE gerar uma "action" separada para cada um deles no mesmo JSON. Nunca ignore partes da mensagem.
 11. **SEM REPETIÇÃO**: Se o usuário disser "Ok", "Valeu" ou similar, responda apenas com texto.
 12. **COMANDO DELETE**: Se o usuário pedir para limpar tarefas, use DELETE com title "tarefas". Se for financeiro, use "financeiro".
@@ -258,6 +262,8 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 26. **VALOR OBRIGATÓRIO (PAY)**: Você NUNCA deve executar a ação PAY sem saber o valor exato. Se o usuário disser "Pagar dentista", pergunte: "Qual o valor do pagamento para eu registrar no seu financeiro?". Só gere a ação PAY quando tiver o valor confirmado.
 27. **LIMPEZA DE DESCRIÇÃO**: Ao extrair descrições ou títulos, remova ruídos e palavras de ligação desnecessárias (ex: "com", "de", "no", "na", "para"). Se o usuário disser "200 com gasolina", a descrição deve ser apenas "Gasolina". Capitalize a primeira letra.
 28. **CRITÉRIO DE REGISTRO**: Priorize o silêncio técnico. Só gere ações se houver um VERBO ou VALOR claros (ex: "Anotar", "Agendar", "Gastei"). Em caso de dúvida, pergunte: "Gostaria que eu registrasse isso na sua agenda ou finanças?".
+29. **CONCLUIR TAREFA**: Se o usuário disser que concluiu, fez, finalizou ou terminou uma tarefa, use a ação DONE com o título exato da tarefa. 
+30. **LIMPEZA DE DUPLICATAS**: Se o usuário pedir para "organizar", "limpar duplicatas" ou "deduplicar", use a ação CLEANUP.
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
@@ -266,6 +272,8 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
     { "action": "EXPENSE", "parsedData": { "amount": float, "description": "string", "category": "string" } },
     { "action": "INCOME", "parsedData": { "amount": float, "description": "string", "category": "string" } },
     { "action": "PAY", "parsedData": { "title": "string", "amount": float } },
+    { "action": "DONE", "parsedData": { "title": "string — título da tarefa a marcar como concluída" } },
+    { "action": "CLEANUP", "parsedData": {} },
     { "action": "SUBSCRIBE", "parsedData": {} }
   ],
   "reply": "Sua resposta natural e humana aqui fatiada em bolhas por \\n\\n"
@@ -320,10 +328,12 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
     const intent = await classifyIntent(msgText);
     const aiActions = aiResponse.actions || [];
     
-    // Se for DELETE e a IA "esqueceu" a ação, nós forçamos aqui
-    if (intent === "DELETE" && !aiActions.some(a => a.action === "DELETE")) {
-      console.log(`[${remoteJid}] 🛡️ Intent de DELETE detectada mas ação ausente. Forçando DELETE.`);
-      aiActions.push({ action: "DELETE", parsedData: { title: msgText } });
+    // Filtro de Segurança Humana: Se a frase for uma NEGATIVA (não ative, não quero), cancelamos a intenção de DELETE
+    const isNegativeResponse = /\bn[ãa]o\b.*\b(ative|quero|fa[çc]a|lembre|alarme|notifica|mande)\b/i.test(msgText);
+    
+    if (intent === "DELETE" && !aiActions.some(a => a.action === "DELETE") && !isNegativeResponse) {
+      console.log(`[${remoteJid}] ⚠️ Intent de DELETE detectada pela classifyIntent mas IA não gerou ação. Aguardando confirmação implícita da IA. NÃO forçando.`);
+      // Não força: confiamos apenas na IA para evitar falsos positivos de exclusão.
     }
     
     // 🛡️ NOVO: Se for QUERY e a IA "esqueceu" a ação, nós forçamos aqui
@@ -405,9 +415,6 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
           const raw = msgText.toLowerCase();
           console.log(`[${remoteJid}] 🔎 Roteando consulta via Classificação de Intenção...`);
 
-          const intent = await classifyIntent(msgText);
-          console.log(`[${remoteJid}] 🧠 Intent detectada: ${intent}`);
-
           if (intent === "TASK_QUERY" || raw.includes("tarefa") || raw.includes("agenda") || raw.includes("compromisso")) {
             const list = await prisma.task.findMany({ 
               where: { user_id: user.id, completed: false }, 
@@ -464,12 +471,14 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
         } else if (action === "INCOME" && parsedData.amount) {
           const val = parseFloat(String(parsedData.amount).replace(',', '.').replace(/[^\d.]/g, ''));
           if (val > 0) {
+            const incDate = parsedData.date ? new Date(String(parsedData.date).replace(/Z$/i, "")) : new Date();
             await prisma.income.create({ 
               data: { 
                 user_id: user.id, 
                 amount: val, 
                 description: parsedData.description || "Receita",
-                category: parsedData.category || "Renda"
+                category: parsedData.category || "Renda",
+                date: incDate
               } 
             });
             hasChange = true;
@@ -540,11 +549,20 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
           console.log(`[${remoteJid}] 🗑️ Stats Remoção - Tarefas: ${beforeT}->${afterT}, Gastos: ${beforeE}->${afterE}`);
           hasChange = true;
         } else if (action === "PAY" && parsedData.amount) {
-          console.log(`[${remoteJid}] 💳 Ação PAY (Dívida) detectada: R$ ${parsedData.amount}`);
-          // Podemos opcionalmente criar um gasto automático aqui se desejado,
-          // mas a regra 26 exige que a IA peça o valor primeiro. 
-          // Se chegou aqui com valor, o DB pode ser atualizado.
-          hasChange = true;
+          const valPay = parseFloat(String(parsedData.amount).replace(',', '.').replace(/[^\d.]/g, ''));
+          if (valPay > 0) {
+            console.log(`[${remoteJid}] 💳 Ação PAY: Registrando R$ ${valPay} como despesa...`);
+            await prisma.expense.create({
+              data: {
+                user_id: user.id,
+                amount: valPay,
+                description: parsedData.title || "Pagamento",
+                category: "Contas/Pagamentos",
+                date: new Date()
+              }
+            });
+            hasChange = true;
+          }
         } else if (action === "SUBSCRIBE") {
           console.log(`[${remoteJid}] 💰 Gerando Checkout Stripe...`);
           const session = await stripe.checkout.sessions.create({
@@ -576,7 +594,11 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
     }
 
     const finalReply = parts.join("\n\n");
-    await prisma.message.create({ data: { user_id: user.id, role: "assistant", content: finalReply } });
+    const MAX_HISTORY_LEN = 400;
+    const contentToSave = finalReply.length > MAX_HISTORY_LEN 
+      ? finalReply.substring(0, MAX_HISTORY_LEN) + "... [relatório completo truncado para contexto]" 
+      : finalReply;
+    await prisma.message.create({ data: { user_id: user.id, role: "assistant", content: contentToSave } });
 
     const instanceName = instance || "main";
 
@@ -594,7 +616,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
         await sendText(remoteJid, part, instanceName);
 
         // Se for a última parte e houver ação de tarefa, tenta enviar botões extras
-        if (isLastPart && hasTaskAction) {
+        if (false && isLastPart && hasTaskAction) { // Botões desabilitados até handler de clique ser validado
           console.log(`[${remoteJid}] ➕ Tentando enviar botões complementares...`);
           await sendEvolutionButtons(remoteJid, "Selecione uma opção:", instanceName, [
             { id: "confirm_task", text: "Ver Agenda 📅" },
@@ -689,14 +711,21 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
 
   // ── ROTA DE RESET (Temporária: Limpeza Geral para Testes) ─────────────────────
-  if (req.method === 'GET' && req.url === '/nico-reset-database-delete-all') {
+  if (req.method === 'GET' && req.url.startsWith('/nico-reset-database-delete-all')) {
+    const urlParams = new URL(req.url, `http://localhost`).searchParams;
+    const tokenProvided = urlParams.get('token');
+    if (!RESET_SECRET || tokenProvided !== RESET_SECRET) {
+      res.writeHead(403, { "Content-Type": "text/plain" });
+      res.end("403 Forbidden");
+      return;
+    }
     try {
       console.log("🧼 Iniciando limpeza completa via Rota de Servidor...");
       // Ordem importa por causa das chaves estrangeiras
       await prisma.message.deleteMany({});
       await prisma.task.deleteMany({});
       await prisma.expense.deleteMany({});
-      await prisma.note.deleteMany({});
+      try { await prisma.note.deleteMany({}); } catch (_) {}
       await prisma.user.deleteMany({});
       
       res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
@@ -719,11 +748,24 @@ const server = http.createServer(async (req, res) => {
 
   // Webhook Stripe
   if (req.method === 'POST' && cleanUrl === '/webhook/stripe') {
-    let body = "";
-    req.on("data", c => body += c);
+    const chunks = [];
+    req.on("data", c => chunks.push(c));
     req.on("end", async () => {
       try {
-        const ev = JSON.parse(body);
+        const body = Buffer.concat(chunks);
+        let ev;
+        const signature = req.headers['stripe-signature'];
+        if (STRIPE_WEBHOOK_SECRET && signature) {
+          try {
+            ev = stripe.webhooks.constructEvent(body, signature, STRIPE_WEBHOOK_SECRET);
+          } catch (sigErr) {
+            console.error("[STRIPE Webhook] ❌ Assinatura inválida:", sigErr.message);
+            res.writeHead(400); res.end("Invalid signature"); return;
+          }
+        } else {
+          console.warn("[STRIPE Webhook] ⚠️ STRIPE_WEBHOOK_SECRET não configurado. Validando sem assinatura (inseguro em produção).");
+          ev = JSON.parse(body.toString());
+        }
         console.log(`[STRIPE Webhook] Evento: ${ev.type}`);
 
         if (ev.type === 'checkout.session.completed') {
@@ -805,7 +847,21 @@ const server = http.createServer(async (req, res) => {
         setTimeout(() => processedIds.delete(msgId), 60000); // Limpa o ID após 1 min
 
         const msgNode = payload.data?.message || payload.data;
-        let msgText = msgNode.conversation || msgNode.extendedTextMessage?.text || msgNode.imageMessage?.caption || "";
+        let msgText = msgNode.conversation 
+          || msgNode.extendedTextMessage?.text 
+          || msgNode.imageMessage?.caption 
+          || msgNode.buttonsResponseMessage?.selectedButtonId
+          || msgNode.templateButtonReplyMessage?.selectedId
+          || "";
+
+        // Traduz IDs de botão para comandos de texto naturais
+        const buttonAliases = {
+          "confirm_task": "mostrar minha agenda",
+          "done_last": "concluir última tarefa"
+        };
+        if (buttonAliases[msgText]) {
+          msgText = buttonAliases[msgText];
+        }
         
         // FILTRO DE RUÍDO (QA): Remove prefixos de teste e metadados que confundem a IA
         msgText = msgText.replace(/\[TESTE \d+\/\d+\]/gi, '').replace(/^G\d+\s*·\s*[^\n]+\n?/i, '').replace(/^=/, '').trim();
