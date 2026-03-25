@@ -70,26 +70,26 @@ function formatFinanceRecords(records, type = "EXPENSE") {
   });
 
   const sorted = Object.entries(groups).sort((a,b) => b[1].total - a[1].total);
-  let reply = type === "EXPENSE" ? "📉 *EXTRATO DE GASTOS*" : "📈 *EXTRATO DE RECEITAS*";
+  let reply = type === "EXPENSE" ? "📉 EXTRATO DE GASTOS" : "📈 EXTRATO DE RECEITAS";
   reply += "\n━━━━━━━━━━━━━━━━━━\n\n";
 
   for (const [cat, data] of sorted) {
     const emoji = catEmojis[cat] || (type === "EXPENSE" ? "📦" : "💵");
     const pct = totalAll > 0 ? ((data.total / totalAll) * 100).toFixed(0) : 0;
     
-    reply += `${emoji} *${cat.toUpperCase()}* (${pct}%)\n`;
+    reply += `${emoji} ${cat.toUpperCase()} (${pct}%)\n`;
     
     data.items.forEach(i => {
       const d = new Date(i.date || new Date());
       const dStr = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-      reply += `▫️ R$ ${i.amount.toFixed(2)} — _${i.description}_ (${dStr})\n`;
+      reply += `▫️ R$ ${i.amount.toFixed(2)} — ${i.description} (${dStr})\n`;
     });
     
-    reply += `└─ *Subtotal: R$ ${data.total.toFixed(2)}*\n\n`;
+    reply += `└─ Subtotal: R$ ${data.total.toFixed(2)}\n\n`;
   }
 
   reply += "━━━━━━━━━━━━━━━━━━\n";
-  reply += `💰 *TOTAL GERAL: R$ ${totalAll.toFixed(2)}*`;
+  reply += `💰 TOTAL GERAL: R$ ${totalAll.toFixed(2)}`;
   return reply;
 }
 
@@ -212,7 +212,7 @@ NUNCA use gírias como "chefe", "mano", "bora", "show", nem exageros informais. 
 11. **CONCLUIR TAREFA (DONE)**: Se o usuário disser "concluí", "concluir", "finalizar", "finalizado", "feito", "já fiz", "finalizei", "terminei", use obrigatoriamente a ação DONE. Referências como "concluir o primeiro" também devem ser resolvidas para o título real da tarefa.
 12. **AGENDAMENTO**: Se houver intenção de lembrete (ex: "me lembre", "anote aí", "marcar reunião"), use TASK com "remind: true".
 13. **INTELIGÊNCIA DE CONTEXTO**: Você entende erros de digitação. Se o usuário disser "digitei errado", "errei o valor", seja proativo: sugira que ele peça para apagar o registro e se coloque à disposição para refazer.
-14. **NEGRITO WHATSAPP**: Use *apenas* o formato de asteriscos (*texto*) para negrito em palavras-chave, valores e cabeçalhos. NUNCA deixe espaços entre o asterisco e o conteúdo (use *R$ 10,00* em vez de * R$ 10,00 *).
+14. **SEM ASTERISCOS**: NUNCA utilize o caractere asterisco (*) para negrito, itálico ou qualquer tipo de formatação. Escreva o texto totalmente limpo, sem o caractere *.
 15. **PERSONALIDADE NATURAL**: Seja cordial como um gerente premium. Se você souber o nome real do usuário, use-o com moderação. Se houver erro ou frustração dele, seja empático e ofereça ajuda imediata para corrigir.
 16. **CANCELAR LEMBRETE**: Se o usuário pedir para "cancelar o alarme" ou "tirar o lembrete" (mas manter a tarefa na agenda), use a ação TOGGLE_ALARM. O target pode ser "todos" (para todos os lembretes) ou o título específico da tarefa.
 17. **CONVERSA LIVRE E OBRIGATÓRIA**: Você é um assessor com personalidade! O campo 'reply' NUNCA deve ficar vazio. Se o usuário fizer uma pergunta casual ("quem eu sou?", "tudo bem?"), responda de forma natural e proativa usando o nome dele (que está no Contexto Atual).
@@ -341,11 +341,11 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
 
           if (queryType === "TASKS") {
             const list = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, orderBy: { due_date: 'asc' } });
-            queryResultText = list.length > 0 ? `📅 *SUA AGENDA ATUALIZADA*\n━━━━━━━━━━━━━━━━━━\n\n` + list.map(t => {
-                if (!t.due_date) return `🔔 *${t.title}*`;
+            queryResultText = list.length > 0 ? `📅 SUA AGENDA ATUALIZADA\n━━━━━━━━━━━━━━━━━━\n\n` + list.map(t => {
+                if (!t.due_date) return `🔔 ${t.title}`;
                 const d = new Date(t.due_date);
                 const dStr = d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
-                return `🔔 *${t.title}*\n   └─ ⏰ ${dStr}\n`;
+                return `🔔 ${t.title}\n   └─ ⏰ ${dStr}\n`;
             }).join("\n") + "\n━━━━━━━━━━━━━━━━━━" : "Sua lista de tarefas está zerada para hoje! 🎉";
           } 
           else if (queryType === "EXPENSES") {
@@ -540,11 +540,10 @@ async function sendText(number, text, instance) {
   const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
   try {
-    const fixedText = text.replace(/\*([^*]+)\*/g, (match, p1) => `*${p1.trim()}*`);
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
-      body: JSON.stringify({ number, text: fixedText }),
+      body: JSON.stringify({ number, text }),
       signal: controller.signal
     });
     
