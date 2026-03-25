@@ -56,17 +56,10 @@ function formatFinanceRecords(records, type = "EXPENSE") {
 
   const catEmojis = {
     // Gastos
-    "Alimentação": "🍔", "Alimentação/Supermercado": "🛒", "Alimentação/Lanche": "🍟",
-    "Lazer/Compras": "🛍️", "Saúde/Academia": "🏋️", "Animais de Estimação": "🐱",
-    "Transporte/Manutenção": "🚗", "Saúde": "💊", "Educação": "📚", "Moradia": "🏠",
-    "Lazer": "🎭", "Trabalho": "💼", "Outros": "📦", "Transporte": "🚗",
-    // Receitas
-    "Salário": "💰", "Renda": "💵", "Transferência": "💸", "Investimento": "📈",
-    "Vendas": "🤝", "Presente": "🎁", "Reembolso": "🔙", "Extra": "➕"
+    "Alimentação": "🍕", "Lazer": "🎭", "Saúde": "💊", "Educação": "📚",
+    "Transporte": "🚗", "Moradia": "🏠", "Cuidados Pessoais": "✨", "Serviços": "🛠️",
+    "Mercado": "🛒", "Assinaturas": "📱", "Vendas": "🛍️", "Salário": "🏦", "Freelance": "💻"
   };
-
-  let groups = {};
-  let totalAll = 0;
 
   records.forEach(r => {
     const c = r.category || (type === "EXPENSE" ? "Outros" : "Renda");
@@ -77,20 +70,26 @@ function formatFinanceRecords(records, type = "EXPENSE") {
   });
 
   const sorted = Object.entries(groups).sort((a,b) => b[1].total - a[1].total);
-  let reply = type === "EXPENSE" ? "💸 Seus Gastos por Categoria:\n\n" : "💰 Suas Receitas por Categoria:\n\n";
+  let reply = type === "EXPENSE" ? "📉 *EXTRATO DE GASTOS*" : "📈 *EXTRATO DE RECEITAS*";
+  reply += "\n━━━━━━━━━━━━━━━━━━\n\n";
 
   for (const [cat, data] of sorted) {
     const emoji = catEmojis[cat] || (type === "EXPENSE" ? "📦" : "💵");
     const pct = totalAll > 0 ? ((data.total / totalAll) * 100).toFixed(0) : 0;
-    reply += `${emoji} ${cat} (${pct}%)\n`;
+    
+    reply += `${emoji} *${cat.toUpperCase()}* (${pct}%)\n`;
+    
     data.items.forEach(i => {
-      reply += `• R$ ${i.amount.toFixed(2)} — ${i.description}\n`;
+      const d = new Date(i.date || new Date());
+      const dStr = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+      reply += `▫️ R$ ${i.amount.toFixed(2)} — _${i.description}_ (${dStr})\n`;
     });
-    reply += `🔸 Total: R$ ${data.total.toFixed(2)}\n\n`;
+    
+    reply += `└─ *Subtotal: R$ ${data.total.toFixed(2)}*\n\n`;
   }
 
-  reply += "━━━━━━━━━━━━━━━\n";
-  reply += `✨ Total Geral: R$ ${totalAll.toFixed(2)}`;
+  reply += "━━━━━━━━━━━━━━━━━━\n";
+  reply += `💰 *TOTAL GERAL: R$ ${totalAll.toFixed(2)}*`;
   return reply;
 }
 
@@ -176,7 +175,7 @@ async function processNicoCore(remoteJid, msgText, instance) {
     console.log(`[AI Context] Iniciando processamento...`);
     const sysPrompt = `### IDENTIDADE
 Você é o Assessor Nico, um consultor financeiro e assistente pessoal polido, educado e profissional. Para você, "Dívidas", "Contas" e "Gastos" são a mesma coisa. 
-Você simplifica a vida financeira do usuário, mas sempre com um tom de cordialidade e elegância, como um gerente de banco premium.
+Você simplifica a vida financeira do usuário, mas sempre com um tone de cordialidade e elegância, como um gerente de banco premium.
 NUNCA use gírias como "chefe", "mano", "bora", "show", nem exageros informais. Seja prestativo, claro e direto ao ponto. Use emojis com moderação apenas para organizar informações visualmente.
 
 ### CONTEXTO ATUAL (VERDADE ABSOLUTA)
@@ -204,19 +203,21 @@ NUNCA use gírias como "chefe", "mano", "bora", "show", nem exageros informais. 
 📅 Data: [Apenas "DD-MM-AAAA" se for dia inteiro, ou "DD-MM-AAAA às HH:mm" se tiver hora]
 🏷️ [Categoria/Alarme]: [categoria do gasto ou Status do Lembrete]
 
-6. **EMOJIS**: Use emojis de forma moderada e estratégica para dar vida à conversa. Máximo 1 por parágrafo.
-7. **INSTRUÇÃO PROATIVA**: Para comandos vagos, dê um exemplo útil.
-8. **CATEGORIZAÇÃO**: Atribua sempre uma categoria lógica aos gastos (EXPENSE).
-10. **MÚLTIPLOS PEDIDOS**: Gere uma "action" separada para cada um deles.
-11. **SEM REPETIÇÃO**: Se for apenas uma confirmação curta como "Ok", responda apenas com texto.
-12. **COMANDO DELETE**: Se o usuário pedir para "apagar", "remover", "excluir" ou "cancelar" um registro específico (ex: "apague o gasto do uber"), use a ação DELETE com parsedData: { "type": "EXPENSES | TASKS | INCOMES", "target": "descrição" }. Se ele quiser "limpar tudo" ou "resetar", use { "type": "ALL" }.
-13. **CONCLUIR TAREFA (DONE)**: Se o usuário disser "concluí", "concluir", "finalizar", "finalizado", "feito", "já fiz", "finalizei", "terminei", use obrigatoriamente a ação DONE com o título da tarefa no parsedData.
-15. **AGENDAMENTO**: Se houver intenção de lembrete (ex: "me lembre", "anote aí", "marcar reunião"), use TASK com "remind: true".
-31. **CONVERSA LIVRE E OBRIGATÓRIA**: Você é um assessor com personalidade! O campo 'reply' NUNCA deve ficar vazio. Se o usuário fizer uma pergunta casual ("quem eu sou?", "tudo bem?"), responda de forma natural e proativa usando o nome dele (que está no Contexto Atual).
-32. **INTELIGÊNCIA DE INTENÇÃO**: Frases como "o que vou fazer hoje?", "meus compromissos", "minha agenda" ou "quais minhas tarefas?" significam que o usuário quer ver a agenda. Você DEVE gerar a ação QUERY com type "TASKS" e escrever no 'reply' algo como "Deixa comigo, fui buscar sua agenda:"
-33. **PERSONALIDADE NATURAL**: Seja cordial como um gerente premium. Se o Contexto Atual indicar que o nome do usuário é "NÃO INFORMADO", NUNCA use codinomes ou títulos genéricos como "Prezado", "Investidor", "Chefe", "Mano", "Amigo", etc. Apenas inicie a frase de forma educada e direta (ex: "Claro, registrei seu gasto..." ao invés de "Claro, Prezado..."). Se você souber o nome real do usuário, use-o com moderação (no máximo uma vez por resposta).
-34. **CANCELAR LEMBRETE**: Se o usuário pedir para "cancelar o alarme" ou "tirar o lembrete" (mas manter a tarefa na agenda), use a ação TOGGLE_ALARM. O target pode ser "todos" (para todos os lembretes) ou o título específico da tarefa.
-35. **NEGRITO WHATSAPP**: Use *apenas* o formato de asteriscos (*texto*) para negrito. NUNCA deixe espaços entre o asterisco e o conteúdo (use *R$ 10,00* em vez de * R$ 10,00 *). O negrito deve ser usado apenas em palavras-chave, valores e datas.
+5. **EMOJIS**: Use emojis de forma moderada e estratégica para dar vida à conversa. Máximo 1 por parágrafo.
+6. **INSTRUÇÃO PROATIVA**: Para comandos vagos, dê um exemplo útil.
+7. **CATEGORIZAÇÃO**: Atribua sempre uma categoria lógica aos gastos (EXPENSE).
+8. **MÚLTIPLOS PEDIDOS**: Gere uma "action" separada para cada um deles.
+9. **SEM REPETIÇÃO**: Se for apenas uma confirmação curta como "Ok", responda apenas com texto.
+10. **COMANDO DELETE**: Se o usuário pedir para "apagar", "remover", "excluir" ou "cancelar" um registro específico (ex: "apague o gasto do uber"), use a ação DELETE. Se ele usar referências ordinais (ex: "apague o primeiro", "remova o último"), identifique pelo histórico qual registro ele se refere e use o nome/descrição real dele no 'target'. Se ele quiser "limpar tudo" ou "resetar", use { "type": "ALL" }.
+11. **CONCLUIR TAREFA (DONE)**: Se o usuário disser "concluí", "concluir", "finalizar", "finalizado", "feito", "já fiz", "finalizei", "terminei", use obrigatoriamente a ação DONE. Referências como "concluir o primeiro" também devem ser resolvidas para o título real da tarefa.
+12. **AGENDAMENTO**: Se houver intenção de lembrete (ex: "me lembre", "anote aí", "marcar reunião"), use TASK com "remind: true".
+13. **INTELIGÊNCIA DE CONTEXTO**: Você entende erros de digitação. Se o usuário disser "digitei errado", "errei o valor", seja proativo: sugira que ele peça para apagar o registro e se coloque à disposição para refazer.
+14. **NEGRITO WHATSAPP**: Use *apenas* o formato de asteriscos (*texto*) para negrito em palavras-chave, valores e cabeçalhos. NUNCA deixe espaços entre o asterisco e o conteúdo (use *R$ 10,00* em vez de * R$ 10,00 *).
+15. **PERSONALIDADE NATURAL**: Seja cordial como um gerente premium. Se você souber o nome real do usuário, use-o com moderação. Se houver erro ou frustração dele, seja empático e ofereça ajuda imediata para corrigir.
+16. **CANCELAR LEMBRETE**: Se o usuário pedir para "cancelar o alarme" ou "tirar o lembrete" (mas manter a tarefa na agenda), use a ação TOGGLE_ALARM. O target pode ser "todos" (para todos os lembretes) ou o título específico da tarefa.
+17. **CONVERSA LIVRE E OBRIGATÓRIA**: Você é um assessor com personalidade! O campo 'reply' NUNCA deve ficar vazio. Se o usuário fizer uma pergunta casual ("quem eu sou?", "tudo bem?"), responda de forma natural e proativa usando o nome dele (que está no Contexto Atual).
+18. **INTELIGÊNCIA DE INTENÇÃO**: Frases como "o que vou fazer hoje?", "meus compromissos", "minha agenda" ou "quais minhas tarefas?" significam que o usuário quer ver a agenda. Você DEVE gerar a ação QUERY com type "TASKS" e escrever no 'reply' algo como "Deixa comigo, fui buscar sua agenda:"
+
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuário disse apenas "oi"), retorne a lista de actions VAZIA [], mas PREENCHA o reply.
@@ -340,11 +341,12 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
 
           if (queryType === "TASKS") {
             const list = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, orderBy: { due_date: 'asc' } });
-            queryResultText = list.length > 0 ? `📅 Sua Agenda:\n\n` + list.map(t => {
-                if (!t.due_date) return `🔔 ${t.title}`;
+            queryResultText = list.length > 0 ? `📅 *SUA AGENDA ATUALIZADA*\n━━━━━━━━━━━━━━━━━━\n\n` + list.map(t => {
+                if (!t.due_date) return `🔔 *${t.title}*`;
                 const d = new Date(t.due_date);
-                return `🔔 ${t.title} - ${d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}`;
-            }).join("\n") : "Sua lista de tarefas está zerada para hoje! 🎉";
+                const dStr = d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+                return `🔔 *${t.title}*\n   └─ ⏰ ${dStr}\n`;
+            }).join("\n") + "\n━━━━━━━━━━━━━━━━━━" : "Sua lista de tarefas está zerada para hoje! 🎉";
           } 
           else if (queryType === "EXPENSES") {
             const exps = await prisma.expense.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
