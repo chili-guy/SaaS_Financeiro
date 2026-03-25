@@ -209,7 +209,7 @@ NUNCA use gírias como "chefe", "mano", "bora", "show", nem exageros informais. 
 8. **CATEGORIZAÇÃO**: Atribua sempre uma categoria lógica aos gastos (EXPENSE).
 10. **MÚLTIPLOS PEDIDOS**: Gere uma "action" separada para cada um deles.
 11. **SEM REPETIÇÃO**: Se for apenas uma confirmação curta como "Ok", responda apenas com texto.
-12. **COMANDO DELETE**: Se o usuário pedir para "limpar tudo", "apagar histórico" ou "resetar", use a ação DELETE. NUNCA use DELETE para marcar uma tarefa como feita.
+12. **COMANDO DELETE**: Se o usuário pedir para "apagar", "remover", "excluir" ou "cancelar" um registro específico (ex: "apague o gasto do uber"), use a ação DELETE com parsedData: { "type": "EXPENSES | TASKS | INCOMES", "target": "descrição" }. Se ele quiser "limpar tudo" ou "resetar", use { "type": "ALL" }.
 13. **CONCLUIR TAREFA (DONE)**: Se o usuário disser "concluí", "feito", "já fiz", "finalizei", use obrigatoriamente a ação DONE com o título da tarefa no parsedData.
 15. **AGENDAMENTO**: Se houver intenção de lembrete (ex: "me lembre", "anote aí", "marcar reunião"), use TASK com "remind: true".
 31. **CONVERSA LIVRE E OBRIGATÓRIA**: Você é um assessor com personalidade! O campo 'reply' NUNCA deve ficar vazio. Se o usuário fizer uma pergunta casual ("quem eu sou?", "tudo bem?"), responda de forma natural e proativa usando o nome dele (que está no Contexto Atual).
@@ -227,7 +227,7 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
     { "action": "EXPENSE", "parsedData": { "amount": float, "description": "string", "category": "string", "date": "ISO-DATE | null" } },
     { "action": "INCOME", "parsedData": { "amount": float, "description": "string", "category": "string", "date": "ISO-DATE | null" } },
     { "action": "QUERY", "parsedData": { "type": "TASKS | EXPENSES | INCOMES | SUMMARY" } },
-    { "action": "DELETE", "parsedData": {} },
+    { "action": "DELETE", "parsedData": { "type": "ALL | EXPENSES | TASKS | INCOMES", "target": "string (opcional)" } },
     { "action": "DONE", "parsedData": { "title": "string" } },
     { "action": "SUBSCRIBE", "parsedData": {} },
     { "action": "TOGGLE_ALARM", "parsedData": { "target": "string ou 'todos'", "active": boolean } }
@@ -392,18 +392,56 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
           hasChange = true;
         }
         else if (action === "DELETE") {
+           const type = parsedData.type || "ALL";
+           const target = (parsedData.target || "").toLowerCase();
            const raw = msgText.toLowerCase();
-           if (raw.includes("tudo") || raw.includes("reset") || raw.includes("limpar agenda") || raw.includes("apagar histórico")) {
+
+           if (type === "ALL" || raw.includes("tudo") || raw.includes("reset") || raw.includes("apagar histórico")) {
               await prisma.task.deleteMany({ where: { user_id: user.id } });
               await prisma.expense.deleteMany({ where: { user_id: user.id } });
-              aiResponse.reply = "🗑️ RESET COMPLETO! Removi todos os registros conforme solicitado.";
+              await prisma.income.deleteMany({ where: { user_id: user.id } });
+              aiResponse.reply = "🗑️ RESET COMPLETO! Removi absolutamente todos os seus registros.";
               hasChange = true;
-           } else if (raw.includes("limpar gasto") || raw.includes("limpar financeiro")) {
-              await prisma.expense.deleteMany({ where: { user_id: user.id } });
-              aiResponse.reply = "🗑️ FINANCEIRO LIMPO! Seus registros de gastos e receitas foram removidos.";
-              hasChange = true;
-           } else {
-              console.log(`[${remoteJid}] 🔎 Ignorando DELETE genérico (segurança).`);
+           } 
+           else if (type === "EXPENSES" || type === "INCOMES") {
+              const model = type === "EXPENSES" ? prisma.expense : prisma.income;
+              const emoji = type === "EXPENSES" ? "💸" : "💰";
+              const label = type === "EXPENSES" ? "Gasto" : "Receita";
+
+              if (target) {
+                const record = await model.findFirst({ 
+                   where: { user_id: user.id, description: { contains: target, mode: 'insensitive' } },
+                   orderBy: { date: 'desc' }
+                });
+                if (record) {
+                   await model.delete({ where: { id: record.id } });
+                   aiResponse.reply = (aiResponse.reply ? aiResponse.reply + "\n\n" : "") + 
+                     `🗑️ ${label} removido!\n\n📝 Descrição: ${record.description}\n💰 Valor: R$ ${record.amount.toFixed(2)}`;
+                   hasChange = true;
+                }
+              } else if (raw.includes("limpar") || raw.includes("todos")) {
+                await model.deleteMany({ where: { user_id: user.id } });
+                aiResponse.reply = `🗑️ FINANCEIRO (${label}) LIMPO! Todos os seus registros de ${label.toLowerCase()}s foram removidos.`;
+                hasChange = true;
+              }
+           }
+           else if (type === "TASKS") {
+              if (target) {
+                const task = await prisma.task.findFirst({ 
+                   where: { user_id: user.id, title: { contains: target, mode: 'insensitive' } },
+                   orderBy: { created_at: 'desc' }
+                });
+                if (task) {
+                   await prisma.task.delete({ where: { id: task.id } });
+                   aiResponse.reply = (aiResponse.reply ? aiResponse.reply + "\n\n" : "") + 
+                     `🗑️ Tarefa excluída!\n\n📝 Título: ${task.title}`;
+                   hasChange = true;
+                }
+              } else if (raw.includes("limpar") || raw.includes("todas")) {
+                await prisma.task.deleteMany({ where: { user_id: user.id } });
+                aiResponse.reply = "🗑️ TAREFAS LIMPAS! Sua agenda foi zerada.";
+                hasChange = true;
+              }
            }
         }
         else if (action === "DONE") {
