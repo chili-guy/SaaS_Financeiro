@@ -338,7 +338,7 @@ Nota: Se o usuário pedir para você 'Parar de mandar mensagem', responda que en
         } 
         else if (action === "QUERY") {
           const queryType = parsedData.type || "SUMMARY"; 
-          let dateFilter = { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
+          let dateFilter = { gte: new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0) };
           
           if (parsedData.date) {
             const rawDate = String(parsedData.date);
@@ -346,12 +346,21 @@ Nota: Se o usuário pedir para você 'Parar de mandar mensagem', responda que en
             if (monthMatch) {
               const year = parseInt(monthMatch[1]);
               const month = parseInt(monthMatch[2]) - 1;
-              dateFilter = { gte: new Date(year, month, 1), lte: new Date(year, month + 1, 0, 23, 59, 59) };
+              dateFilter = { 
+                gte: new Date(year, month, 1, 0, 0, 0), 
+                lte: new Date(year, month + 1, 0, 23, 59, 59) 
+              };
             } else {
               const d = new Date(rawDate);
-              dateFilter = { gte: new Date(d.setHours(0,0,0,0)), lte: new Date(d.setHours(23,59,59,999)) };
+              if (!isNaN(d.getTime())) {
+                dateFilter = { 
+                  gte: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0), 
+                  lte: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59) 
+                };
+              }
             }
           }
+          console.log(`[QUERY DEBUG] User: ${user.id}, Type: ${queryType}, Filter:`, JSON.stringify(dateFilter));
           let queryResultText = ""; 
 
           if (queryType === "TASKS") {
