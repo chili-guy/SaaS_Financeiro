@@ -209,8 +209,9 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 11. **SEM REPETIÇÃO**: Se for apenas uma confirmação curta como "Ok", responda apenas com texto.
 12. **COMANDO DELETE**: Se o usuário pedir para limpar ou excluir, use DELETE.
 15. **AGENDAMENTO**: Se houver intenção de lembrete, use TASK com "remind: true".
-31. **CONVERSA LIVRE**: Se houver dúvida ou pergunta direta, responda no 'reply'.
-33. **CONSULTAS (QUERY)**: Use o campo 'type' com um dos valores: "TASKS", "EXPENSES", "INCOMES", "SUMMARY".
+31. **CONVERSA LIVRE E OBRIGATÓRIA**: Você é um assessor com personalidade! O campo 'reply' NUNCA deve ficar vazio. Se o usuário fizer uma pergunta casual ("quem eu sou?", "tudo bem?"), responda de forma natural, proativa e bem-humorada usando o nome dele (que está no Contexto Atual).
+32. **INTELIGÊNCIA DE INTENÇÃO**: Frases como "o que vou fazer hoje?", "meus compromissos", "minha agenda" ou "quais minhas tarefas?" significam que o usuário quer ver a agenda. Você DEVE gerar a ação QUERY com type "TASKS" e escrever no 'reply' algo como "Deixa comigo, fui buscar sua agenda:"
+33. **SEJA NATURAL**: Ao confirmar ações ou enviar relatórios, não seja um robô. Adicione comentários curtos e humanos no campo 'reply' (ex: "Anotado, chefe!", "Mais um gasto registrado, cuidado com o limite rs"). 
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
@@ -326,29 +327,33 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
         else if (action === "QUERY") {
           const queryType = parsedData.type || "SUMMARY"; 
           const dateFilter = { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
+          let queryResultText = ""; 
 
           if (queryType === "TASKS") {
             const list = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, orderBy: { due_date: 'asc' } });
-            aiResponse.reply = list.length > 0 ? `✅ *Sua Agenda de Tarefas:*\n\n` + list.map(t => {
+            queryResultText = list.length > 0 ? `📅 *Sua Agenda:*\n\n` + list.map(t => {
                 if (!t.due_date) return `🔔 *${t.title}*`;
                 const d = new Date(t.due_date);
                 return `🔔 *${t.title}* - ${d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}`;
-            }).join("\n") : "Sua lista de tarefas está zerada! 🎉";
+            }).join("\n") : "Sua lista de tarefas está zerada para hoje! 🎉";
           } 
           else if (queryType === "EXPENSES") {
             const exps = await prisma.expense.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
-            aiResponse.reply = formatFinanceRecords(exps, "EXPENSE");
+            queryResultText = formatFinanceRecords(exps, "EXPENSE");
           } 
           else if (queryType === "INCOMES") {
             const incs = await prisma.income.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
-            aiResponse.reply = formatFinanceRecords(incs, "INCOME");
+            queryResultText = formatFinanceRecords(incs, "INCOME");
           } 
           else {
             const tasks = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, take: 5 });
             const eSum = await prisma.expense.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
             const iSum = await prisma.income.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
-            aiResponse.reply = `✨ *Seu Resumo Geral* ✨\n\n💰 Receitas: R$ ${(iSum._sum.amount || 0).toFixed(2)}\n💸 Gastos: R$ ${(eSum._sum.amount || 0).toFixed(2)}\n📋 Tarefas pendentes: ${tasks.length}`;
+            queryResultText = `✨ *Seu Resumo Geral* ✨\n\n💰 Receitas: R$ ${(iSum._sum.amount || 0).toFixed(2)}\n💸 Gastos: R$ ${(eSum._sum.amount || 0).toFixed(2)}\n📋 Tarefas pendentes: ${tasks.length}`;
           }
+
+          // A MÁGICA ACONTECE AQUI: Junta a fala natural da IA com os dados puxados do banco!
+          aiResponse.reply = (aiResponse.reply ? aiResponse.reply + "\n\n" : "") + queryResultText;
         }
         else if (action === "DELETE") {
            const raw = msgText.toLowerCase();
@@ -389,9 +394,11 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
     // 6. Resposta Final (Blindada contra amnésia)
     let rawReply = aiResponse.reply?.trim();
     if (!rawReply) {
-      if (hasChange) rawReply = "Tudo certo! Atualizei seus registros. ✅";
-      else if (isFirst) rawReply = "Olá! Sou seu Assessor Nico. Como posso te ajudar com suas finanças ou tarefas hoje? 🚀";
-      else rawReply = "Pode me dar mais detalhes do que você precisa?";
+      if (hasChange) {
+        rawReply = "Prontinho, já deixei tudo registrado aqui para você! ✅";
+      } else {
+        rawReply = "Putz, dei uma engasgada aqui processando isso. Você pode me explicar de outra forma? 🤔";
+      }
     }
 
     // Se for uma lista financeira/agenda ou uma mensagem muito longa, enviamos em bloco ÚNICO
