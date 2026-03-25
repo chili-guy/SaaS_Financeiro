@@ -175,10 +175,12 @@ async function processNicoCore(remoteJid, msgText, instance) {
       return;
     }
 
-    // 2. Histórico e Contexto
-    await prisma.message.create({ data: { user_id: user.id, role: "user", content: msgText } });
-    const history = await prisma.message.findMany({ where: { user_id: user.id }, orderBy: { created_at: 'desc' }, take: 12 });
+    // 2. Histórico e Contexto (Busca antes de salvar a nova para evitar duplicação no prompt)
+    const history = await prisma.message.findMany({ where: { user_id: user.id }, orderBy: { created_at: 'desc' }, take: 30 });
     const memory  = history.reverse().map(m => ({ role: m.role, content: m.content }));
+
+    // Agora salva a mensagem atual no banco para o próximo turno
+    await prisma.message.create({ data: { user_id: user.id, role: "user", content: msgText } });
 
     const pendingTasks = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, take: 15 });
     const expenses     = await prisma.expense.findMany({ where: { user_id: user.id }, orderBy: { date: 'desc' }, take: 5 });
@@ -580,7 +582,11 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
     }
 
     // 6. Resposta Final (Deduplicação e Tratamento de Listas)
-    const fallbackMsg = "Olá! Sou seu Assessor Nico. Como posso te ajudar com suas finanças ou tarefas hoje? 🚀";
+    const isReturningUser = history.length > 0;
+    const fallbackMsg = isReturningUser 
+      ? "Desculpe, não entendi bem essa última. Pode reformular? 🚀"
+      : "Olá! Sou seu Assessor Nico. Como posso te ajudar com suas finanças ou tarefas hoje? 🚀";
+    
     const rawReply = (aiResponse.reply || (hasChange ? "Tudo certo! ✅" : fallbackMsg)).trim();
     
     // Se for uma lista financeira/agenda ou uma mensagem muito longa, enviamos em bloco ÚNICO
