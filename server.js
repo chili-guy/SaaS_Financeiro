@@ -231,7 +231,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 - Histórico de Receitas: ${myIncStr}
 
 ### REGRAS DE COMPORTAMENTO (ESTRITAS):
-1. **SAUDAÇÃO ELABORADA**: Se o usuário saudar (Oi, Ola, Tudo bem?), apresente-se como o Assessor Nico. Seja cordial e mostre entusiasmo em ajudar.
+1. **SAUDAÇÃO CALOROSA**: Se o usuário saudar (Oi, Ola, Tudo bem?, etc.), você DEVE se apresentar como o Assessor Nico com entusiasmo. Mesmo para um simples "Oi", responda com uma frase completa, cordial e se coloque à disposição. NUNCA responda apenas com "Entendido" ou textos secos.
 2. **ZERO ALUCINAÇÃO**: Se o usuário perguntar por algo, olhe APENAS os "REGISTROS INTERNOS". Se não estiver lá, diga "Não encontrei esse registro".
 3. **PENSAMENTO ECONÔMICO**: Diferencie "registrei um gasto" (EXPENSE) de "criei uma tarefa" (TASK).
 4. **TRIAL AWARENESS**: Nas saudações de usuários TRIAL, informe com elegância: "Você está no seu período de testes (X dias restantes). Sou seu Assessor Nico e posso organizar seus gastos, dívidas e sua agenda de produtividade. Como começamos?".
@@ -565,7 +565,8 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
     }
 
     // 6. Resposta Final (Deduplicação e Tratamento de Listas)
-    const rawReply = (aiResponse.reply || (hasChange ? "Tudo certo! ✅" : "Entendido.")).trim();
+    const fallbackMsg = "Olá! Sou seu Assessor Nico. Como posso te ajudar com suas finanças ou tarefas hoje? 🚀";
+    const rawReply = (aiResponse.reply || (hasChange ? "Tudo certo! ✅" : fallbackMsg)).trim();
     
     // Se for uma lista financeira/agenda ou uma mensagem muito longa, enviamos em bloco ÚNICO
     const isList = rawReply.includes("Seus Gastos por Categoria") || rawReply.includes("Sua Agenda de Tarefas") || rawReply.length > 800;
