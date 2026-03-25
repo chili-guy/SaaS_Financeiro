@@ -338,7 +338,7 @@ Nota: Se o usuário pedir para você 'Parar de mandar mensagem', responda que en
         } 
         else if (action === "QUERY") {
           const queryType = parsedData.type || "SUMMARY"; 
-          let dateFilter = { gte: new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0) };
+          let activeFilter = { gte: firstDayMonth };
           
           if (parsedData.date) {
             const rawDate = String(parsedData.date);
@@ -346,21 +346,20 @@ Nota: Se o usuário pedir para você 'Parar de mandar mensagem', responda que en
             if (monthMatch) {
               const year = parseInt(monthMatch[1]);
               const month = parseInt(monthMatch[2]) - 1;
-              dateFilter = { 
+              activeFilter = { 
                 gte: new Date(year, month, 1, 0, 0, 0), 
                 lte: new Date(year, month + 1, 0, 23, 59, 59) 
               };
             } else {
               const d = new Date(rawDate);
               if (!isNaN(d.getTime())) {
-                dateFilter = { 
+                activeFilter = { 
                   gte: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0), 
                   lte: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59) 
                 };
               }
             }
           }
-          console.log(`[QUERY DEBUG] User: ${user.id}, Type: ${queryType}, Filter:`, JSON.stringify(dateFilter));
           let queryResultText = ""; 
 
           if (queryType === "TASKS") {
@@ -373,17 +372,17 @@ Nota: Se o usuário pedir para você 'Parar de mandar mensagem', responda que en
             }).join("\n") + "\n━━━━━━━━━━━━━━━━━━" : "Sua lista de tarefas está zerada para hoje! 🎉";
           } 
           else if (queryType === "EXPENSES") {
-            const exps = await prisma.expense.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
+            const exps = await prisma.expense.findMany({ where: { user_id: user.id, date: activeFilter }, orderBy: { date: 'desc' } });
             queryResultText = formatFinanceRecords(exps, "EXPENSE");
           } 
           else if (queryType === "INCOMES") {
-            const incs = await prisma.income.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
+            const incs = await prisma.income.findMany({ where: { user_id: user.id, date: activeFilter }, orderBy: { date: 'desc' } });
             queryResultText = formatFinanceRecords(incs, "INCOME");
           } 
           else {
             const tasks = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, take: 5 });
-            const eSum = await prisma.expense.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
-            const iSum = await prisma.income.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
+            const eSum = await prisma.expense.aggregate({ where: { user_id: user.id, date: activeFilter }, _sum: { amount: true } });
+            const iSum = await prisma.income.aggregate({ where: { user_id: user.id, date: activeFilter }, _sum: { amount: true } });
             queryResultText = `✨ Seu Resumo Geral ✨\n\n💰 Receitas: R$ ${(iSum._sum.amount || 0).toFixed(2)}\n💸 Gastos: R$ ${(eSum._sum.amount || 0).toFixed(2)}\n📋 Tarefas pendentes: ${tasks.length}`;
           }
 
