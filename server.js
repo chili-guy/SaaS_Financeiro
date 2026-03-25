@@ -239,8 +239,8 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
       body: JSON.stringify({
         model: "deepseek-chat",
         messages: [{ role: "system", "content": sysPrompt }, ...memory, { role: "user", "content": msgText }],
-        temperature: 0.2, 
-        response_format: { type: "json_object" } 
+        temperature: 0.2
+        // response_format: { type: "json_object" } 
       }),
       signal: controller.signal
     }).finally(() => clearTimeout(timeoutId));
@@ -256,9 +256,12 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
       console.log(`[DEBUG IA - ${remoteJid}] Resposta CRUA da DeepSeek:`, rawContent);
       
       try {
-        const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          aiResponse = JSON.parse(jsonMatch[0]);
+        const s = rawContent.indexOf('{');
+        const e = rawContent.lastIndexOf('}');
+        
+        if (s !== -1 && e !== -1) {
+          const jsonString = rawContent.substring(s, e + 1);
+          aiResponse = JSON.parse(jsonString);
         } else {
           aiResponse.reply = rawContent.trim();
         }
