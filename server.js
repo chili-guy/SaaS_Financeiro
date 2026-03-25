@@ -47,11 +47,11 @@ async function classifyIntent(msgText) {
     const prompt = `Classifique a intenção do usuário baseado na mensagem. Responda APENAS um JSON válido no formato: { "intent": "..." }. 
 
 Intenções possíveis:
-- TASK_QUERY (Consultar agenda, tarefas, compromissos, lembretes)
-- EXPENSE_QUERY (Consultar gastos, dívidas, boletos, faturas, financeiro)
-- INCOME_QUERY (Consultar ganhos, salários, depósitos)
-- SUMMARY_QUERY (Resumo de tudo, visão geral, como estou hoje, balanço geral)
-- DELETE (Apagar, limpar, excluir histórico, tarefas ou gastos)
+- TASK_QUERY (Listar, ver, mostrar, dizer o que tem na agenda/lembretes. EXCLUIR se o usuário estiver pedindo para anotar algo agora)
+- EXPENSE_QUERY (Ver gastos, quanto gastei, lista de dívidas, financeiro)
+- INCOME_QUERY (Ver ganhos, extrato de receitas)
+- SUMMARY_QUERY (Resumo geral, balanço do mês, como estou hoje)
+- DELETE (Apagar tudo, limpar histórico, excluir)
 - UNKNOWN (Outros casos)
 
 Mensagem: "${msgText}"`;
@@ -142,38 +142,19 @@ async function processNicoCore(remoteJid, msgText, instance) {
   userLocks.add(remoteJid);
 
   try {
-    // 1. Controle de Assinante (SaaS com Trial de 14 dias)
+    // 1. Controle de Assinante (Apenas para Pagos ou Trial via Stripe)
     let user = await prisma.user.findUnique({ where: { phone_number: remoteJid } });
-    if (!user) {
-      user = await prisma.user.create({ data: { phone_number: remoteJid, status: "TRIAL" } });
-    }
+    
+    // Se o usuário não existe ou não está ativo, bloqueamos o acesso
+    if (!user || user.status !== "ACTIVE") {
+      // Se não existe, criamos como INACTIVE para logar tentativas
+      if (!user) {
+        user = await prisma.user.create({ data: { phone_number: remoteJid, status: "INACTIVE" } });
+      }
 
-    const now = new Date();
-    const created = new Date(user.created_at);
-    const diffTime = Math.abs(now - created);
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    const daysLeft = 30 - diffDays;
+      const blockMsg = `Olá! Sou o Nico, seu Assessor Financeiro. 🤖📈\n\nNotei que você ainda não ativou sua assinatura. Para ter acesso à minha inteligência para organizar seus gastos e tarefas, você precisa garantir sua vaga na nossa página oficial.\n\n🎁 *DETALHE:* Você ganha 30 DIAS TOTALMENTE GRÁTIS! Só é cobrado após o primeiro mês.\n\n🔗 *Garanta seu acesso agora:* https://assensornico.com\n\n_Assim que concluir o cadastro, seu acesso será liberado aqui no WhatsApp automaticamente!_`;
 
-    // Se o trial acabou e não é ACTIVE, bloqueia.
-    if (user.status !== "ACTIVE" && daysLeft <= 0) {
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ['card'],
-        line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
-        mode: 'subscription',
-        client_reference_id: remoteJid,
-        success_url: `${APP_URL}/success.html`,
-        cancel_url: `${APP_URL}/cancel.html`,
-      });
-
-      const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${instance}`;
-      await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
-        body: JSON.stringify({ 
-          number: remoteJid, 
-          text: `Seu período de teste de 30 dias chegou ao fim! ⏳ \n\nPara continuar com suas mentorias financeiras e organização de tarefas, ative sua assinatura no link abaixo: \n\n🔗 ${session.url}` 
-        })
-      });
+      await sendText(remoteJid, blockMsg, instance || "main");
       return;
     }
 
@@ -215,13 +196,12 @@ async function processNicoCore(remoteJid, msgText, instance) {
     const isFirst   = msgCount <= 1;
     const isPaying  = /pagar|assinar|assinatura|checkout|pix/i.test(msgText);
 
-    // 3. System Prompt (Instruções de Identidade e Regras)
     const sysPrompt = `### IDENTIDADE
 Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dívidas", "Contas" e "Gastos" são a mesma coisa. Você é um parceiro que simplifica a vida financeira do usuário.
 
 ### CONTEXTO ATUAL (VERDADE ABSOLUTA)
 - Data/Hora: ${dataAtual}
-- Status da Assinatura: ${user.status === "ACTIVE" ? "ASSINANTE PRO" : `TRIAL (${daysLeft} dias restantes)`}
+- Status da Assinatura: ASSINANTE PRO (Acesso Liberado)
 - Usuário: ${user.name && user.name !== "Nico User" ? user.name : "Investidor"}
 
 ### REGISTROS INTERNOS (PARA SEU CONHECIMENTO):
@@ -231,10 +211,9 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 - Histórico de Receitas: ${myIncStr}
 
 ### REGRAS DE COMPORTAMENTO (ESTRITAS):
-1. **SAUDAÇÃO CALOROSA**: Se o usuário saudar (Oi, Ola, Tudo bem?, etc.), você DEVE se apresentar como o Assessor Nico com entusiasmo. Mesmo para um simples "Oi", responda com uma frase completa, cordial e se coloque à disposição. NUNCA responda apenas com "Entendido" ou textos secos.
+1. **SAUDAÇÃO CALOROSA**: Se o usuário saudar (Oi, Ola, etc.), seja cordial. Se for a PRIMEIRA vez que ele fala (veja msgCount), apresente-se como o Assessor Nico de forma completa. Se já estiverem conversando, responda de forma breve, amigável e natural. NUNCA responda apenas com "Entendido".
 2. **ZERO ALUCINAÇÃO**: Se o usuário perguntar por algo, olhe APENAS os "REGISTROS INTERNOS". Se não estiver lá, diga "Não encontrei esse registro".
 3. **PENSAMENTO ECONÔMICO**: Diferencie "registrei um gasto" (EXPENSE) de "criei uma tarefa" (TASK).
-4. **TRIAL AWARENESS**: Nas saudações de usuários TRIAL, informe com elegância: "Você está no seu período de testes (X dias restantes). Sou seu Assessor Nico e posso organizar seus gastos, dívidas e sua agenda de produtividade. Como começamos?".
 5. **MODELO DE CONFIRMAÇÃO**: Use SEMPRE este padrão visual para confirmar qualquer registro (Financeiro ou Agenda):
 ✅ [Gasto/Entrada/Tarefa] registrado!
 
@@ -333,8 +312,11 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
     }
     
     // 🛡️ NOVO: Se for QUERY e a IA "esqueceu" a ação, nós forçamos aqui
+    // APENAS se não houver outras ações de escrita (TASK, EXPENSE, etc.) para evitar redundância
     const queryIntents = ["TASK_QUERY", "EXPENSE_QUERY", "INCOME_QUERY", "SUMMARY_QUERY"];
-    if (queryIntents.includes(intent) && !aiActions.some(a => a.action === "QUERY")) {
+    const hasWriteAction = aiActions.some(a => ["TASK", "EXPENSE", "INCOME", "PAY", "DONE", "DELETE"].includes(a.action));
+    
+    if (queryIntents.includes(intent) && !aiActions.some(a => a.action === "QUERY") && !hasWriteAction) {
       console.log(`[${remoteJid}] 🛡️ Intent de QUERY detectada mas ação ausente. Forçando QUERY.`);
       aiActions.push({ action: "QUERY", parsedData: { type: intent } });
     }
@@ -730,22 +712,27 @@ const server = http.createServer(async (req, res) => {
         console.log(`[STRIPE Webhook] Evento: ${ev.type}`);
 
         if (ev.type === 'checkout.session.completed') {
-          const phone = ev.data.object.client_reference_id;
+          const session = ev.data.object;
+          // Tenta pegar o telefone do client_reference_id OU do metadata 'whatsapp' 
+          // ou do campo customizado (se existir)
+          let phone = session.client_reference_id || session.metadata?.whatsapp || session.customer_details?.phone;
+          
           if (phone) {
-            console.log(`[STRIPE Webhook] 💰 Pagamento confirmado para o número: ${phone}`);
-            await prisma.user.update({ where: { phone_number: phone }, data: { status: 'ACTIVE' } });
+            // Limpa o número (remove caracteres não numéricos e garante @s.whatsapp.net)
+            let cleanPhone = phone.replace(/[^\d]/g, '');
+            if (!cleanPhone.includes("@s.whatsapp.net")) cleanPhone = `${cleanPhone}@s.whatsapp.net`;
+
+            console.log(`[STRIPE Webhook] 💰 Ativando acesso para: ${cleanPhone}`);
+            
+            await prisma.user.upsert({
+              where: { phone_number: cleanPhone },
+              update: { status: 'ACTIVE' },
+              create: { phone_number: cleanPhone, status: 'ACTIVE' }
+            });
             
             // Notificar usuário via WhatsApp
             const instance = process.env.INSTANCE || "main";
-            const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${instance}`;
-            await fetch(endpoint, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
-              body: JSON.stringify({ 
-                number: phone, 
-                text: "Opa! Recebi a confirmação do seu pagamento. ✅ \n\nSeu acesso ao Assessor Nico agora é ILIMITADO! 🎉 \n\nJá pode começar a organizar suas finanças e tarefas sem restrições. Como posso ser útil agora? 📈🚀" 
-              })
-            }).catch(e => console.error("Erro ao enviar confirmação WhatsApp:", e.message));
+            await sendText(cleanPhone, "Opa! Recebi a confirmação do seu acesso. ✅ \n\nSou seu Assessor Nico e já estou pronto para te ajudar a organizar suas finanças e tarefas! 📈🚀 \n\nO que vamos registrar primeiro? Mande 'Gastei 50 no mercado' ou 'Lembrar de treinar às 18h'.", instance);
           }
         }
         res.writeHead(200); res.end();
