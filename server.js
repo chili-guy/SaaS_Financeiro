@@ -175,7 +175,9 @@ async function processNicoCore(remoteJid, msgText, instance) {
 
     console.log(`[AI Context] Iniciando processamento...`);
     const sysPrompt = `### IDENTIDADE
-Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dívidas", "Contas" e "Gastos" são a mesma coisa. Você é um parceiro que simplifica a vida financeira do usuário.
+Você é o Assessor Nico, um consultor financeiro e assistente pessoal polido, educado e profissional. Para você, "Dívidas", "Contas" e "Gastos" são a mesma coisa. 
+Você simplifica a vida financeira do usuário, mas sempre com um tom de cordialidade e elegância, como um gerente de banco premium.
+NUNCA use gírias como "chefe", "mano", "bora", "show", nem exageros informais. Seja prestativo, claro e direto ao ponto. Use emojis com moderação apenas para organizar informações visualmente.
 
 ### CONTEXTO ATUAL (VERDADE ABSOLUTA)
 - Data/Hora: ${dataAtual}
@@ -212,6 +214,7 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 31. **CONVERSA LIVRE E OBRIGATÓRIA**: Você é um assessor com personalidade! O campo 'reply' NUNCA deve ficar vazio. Se o usuário fizer uma pergunta casual ("quem eu sou?", "tudo bem?"), responda de forma natural, proativa e bem-humorada usando o nome dele (que está no Contexto Atual).
 32. **INTELIGÊNCIA DE INTENÇÃO**: Frases como "o que vou fazer hoje?", "meus compromissos", "minha agenda" ou "quais minhas tarefas?" significam que o usuário quer ver a agenda. Você DEVE gerar a ação QUERY com type "TASKS" e escrever no 'reply' algo como "Deixa comigo, fui buscar sua agenda:"
 33. **SEJA NATURAL**: Ao confirmar ações ou enviar relatórios, não seja um robô. Adicione comentários curtos e humanos no campo 'reply' (ex: "Anotado, chefe!", "Mais um gasto registrado, cuidado com o limite rs"). 
+34. **CANCELAR LEMBRETE**: Se o usuário pedir para "cancelar o alarme" ou "tirar o lembrete" (mas manter a tarefa na agenda), use a ação TOGGLE_ALARM. O target pode ser "todos" (para todos os lembretes) ou o título específico da tarefa.
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuário disse apenas "oi"), retorne a lista de actions VAZIA [], mas PREENCHA o reply.
@@ -223,7 +226,8 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
     { "action": "INCOME", "parsedData": { "amount": float, "description": "string", "category": "string", "date": "ISO-DATE | null" } },
     { "action": "QUERY", "parsedData": { "type": "TASKS | EXPENSES | INCOMES | SUMMARY" } },
     { "action": "DELETE", "parsedData": {} },
-    { "action": "SUBSCRIBE", "parsedData": {} }
+    { "action": "SUBSCRIBE", "parsedData": {} },
+    { "action": "TOGGLE_ALARM", "parsedData": { "target": "string ou 'todos'", "active": boolean } }
   ],
   "reply": "Sua resposta natural, humana e com emojis aqui. OBRIGATÓRIO preencher se for um bate-papo ou pergunta."
 }
@@ -357,6 +361,33 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
           // A MÁGICA ACONTECE AQUI: Junta a fala natural da IA com os dados puxados do banco!
           aiResponse.reply = (aiResponse.reply ? aiResponse.reply + "\n\n" : "") + queryResultText;
         }
+        else if (action === "TOGGLE_ALARM") {
+          const target = (parsedData.target || "").toLowerCase();
+          const turnOff = parsedData.active === false;
+          // Se turnOff for true, marcamos notified como true para o sistema "achar" que já tocou e não avisar mais.
+          const flagStatus = turnOff ? true : false; 
+
+          if (target === "todos" || target === "tudo") {
+            await prisma.task.updateMany({ 
+              where: { user_id: user.id, completed: false }, 
+              data: { notified: flagStatus, notified_5min: flagStatus } 
+            });
+            console.log(`[${remoteJid}] 🔇 Todos os alarmes desativados.`);
+          } else {
+            // Tenta achar a tarefa específica
+            const existing = await prisma.task.findFirst({ 
+              where: { user_id: user.id, completed: false, title: { contains: target, mode: 'insensitive' } } 
+            });
+            if (existing) {
+              await prisma.task.update({ 
+                where: { id: existing.id }, 
+                data: { notified: flagStatus, notified_5min: flagStatus } 
+              });
+              console.log(`[${remoteJid}] 🔇 Alarme desativado para: ${existing.title}`);
+            }
+          }
+          hasChange = true;
+        }
         else if (action === "DELETE") {
            const raw = msgText.toLowerCase();
            if (raw.includes("tudo") || raw.includes("reset")) {
@@ -403,15 +434,8 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
       }
     }
 
-    // Se for uma lista financeira/agenda ou uma mensagem muito longa, enviamos em bloco ÚNICO
-    const isList = rawReply.includes("Seus Gastos por Categoria") || rawReply.includes("Sua Agenda de Tarefas") || rawReply.length > 800;
-    
-    let parts;
-    if (isList) {
-      parts = [rawReply];
-    } else {
-      parts = [...new Set(rawReply.split("\n\n").map(p => p.trim()))].filter(p => p !== "");
-    }
+    // QA: Agora o Nico envia tudo em um único balão de mensagem, mantendo a formatação original da IA.
+    const parts = [rawReply];
 
     const finalReply = parts.join("\n\n");
     const MAX_HISTORY_LEN = 400;
