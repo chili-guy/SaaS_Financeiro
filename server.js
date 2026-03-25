@@ -44,48 +44,7 @@ function cleanTitle(title) {
 /**
  * Função de Classificação de Intenção via IA (Reforço de Precisão)
  */
-async function classifyIntent(msgText) {
-  try {
-    const prompt = `Classifique a intenção do usuário baseado na mensagem. Responda APENAS um JSON válido no formato: { "intent": "..." }. 
 
-Intenções possíveis:
-- TASK_QUERY (Apenas para LISTAR ou VER a agenda. EXCLUIR se o usuário estiver pedindo para anotar algo agora)
-- EXPENSE_QUERY (Ver gastos, extratos, relatórios)
-- INCOME_QUERY (Ver ganhos)
-- SUMMARY_QUERY (Resumo do mês)
-- DELETE (Apagar, limpar, excluir dados. NÃO use para negativas como "não ative" ou "pare com isso")
-- UNKNOWN (Conversas gerais, negativas de ação ou perguntas)
-
-IMPORTANTE: Frases como "não ative o lembrete" ou "não quero alarme" são UNKNOWN ou comandos de configuração, NUNCA DELETE.
-
-Mensagem: "${msgText}"`;
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
-
-    const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${DEEPSEEK_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "deepseek-chat",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0,
-        response_format: { type: "json_object" }
-      }),
-      signal: controller.signal
-    }).finally(() => clearTimeout(timeoutId));
-
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content || "{}";
-    return JSON.parse(content).intent || "UNKNOWN";
-  } catch (e) {
-    console.error("❌ Erro classifyIntent:", e.message);
-    return "UNKNOWN";
-  }
-}
 
 /**
  * Formata os registros financeiros agrupados por categoria (Relatório Premium Padronizado)
@@ -209,13 +168,12 @@ async function processNicoCore(remoteJid, msgText, instance) {
       ? incomes.map(i => `- R$${i.amount} em ${i.description} (${i.category}) [DATA: ${fmtDate(i.date)}]`).join("\n") 
       : "Nenhuma receita recente";
 
-    const dataAtual  = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const msgCount = await prisma.message.count({ where: { user_id: user.id } });
+    const isFirst = msgCount <= 1;
 
-    console.log(`[AI Context] User: ${user.phone_number} | Tasks: ${pendingTasks.length} | Balance: R$${balance}`);
+    const dataAtual = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
-    const msgCount  = await prisma.message.count({ where: { user_id: user.id } });
-    const isFirst   = msgCount <= 1;
-
+    console.log(`[AI Context] Iniciando processamento...`);
     const sysPrompt = `### IDENTIDADE
 Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dívidas", "Contas" e "Gastos" são a mesma coisa. Você é um parceiro que simplifica a vida financeira do usuário.
 
@@ -243,59 +201,45 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
 💰 Valor: R$ [valor] (se financeiro)
 📅 [Data/Hora]: [Apenas "DD-MM-AAAA" se for dia inteiro, ou "DD-MM-AAAA às HH:mm" se tiver hora]
 🏷️ [Categoria/Alarme]: [categoria ou Status do Lembrete]
-6. **EMOJIS**: Use emojis de forma moderada e estratégica para dar vida à conversa (ex: 💰 para finanças, ✅ para confirmações, 🔔 para avisos). Máximo 1 por parágrafo. Seja elegante.
-7. **INSTRUÇÃO PROATIVA**: Para comandos vagos, dê um exemplo útil (ex: "Pode me mandar seus gastos ou pedir para eu lembrar de algo!").
+
+6. **EMOJIS**: Use emojis de forma moderada e estratégica para dar vida à conversa. Máximo 1 por parágrafo.
+7. **INSTRUÇÃO PROATIVA**: Para comandos vagos, dê um exemplo útil.
 8. **CATEGORIZAÇÃO**: Atribua sempre uma categoria lógica aos gastos (EXPENSE).
-10. **MÚLTIPLOS PEDIDOS**: Se a mensagem contiver vários pedidos (ex: várias tarefas ou gastos), você DEVE gerar uma "action" separada para cada um deles no mesmo JSON. Nunca ignore partes da mensagem.
-11. **SEM REPETIÇÃO**: Se o usuário disser "Ok", "Valeu" ou similar, responda apenas com texto.
-12. **COMANDO DELETE**: Se o usuário pedir para limpar tarefas, use DELETE com title "tarefas". Se for financeiro, use "financeiro".
-13. **REMARCAR (UPDATE)**: Se o usuário quiser mudar o horário de uma tarefa já mencionada, use a ação TASK com o mesmo título e o novo "due_date".
-14. **INTELIGÊNCIA DE TEMPO**: Se o usuário disser algo confuso como "Mandei o lembrete às 18h", NÃO aceite literalmente. Questione se ele quer que VOCÊ mande o lembrete nesse horário e já gere a ação TASK para atualizar o horário.
-15. **AGENDAMENTO**: Se o usuário usar verbos como "Lembrar", "Me avise", "Notificar", "Mandar lembrete" ou "Anote e lembre", você DEVE gerar "remind: true" no JSON automaticamente. Lembretes só são DESATIVADOS (false) se o usuário for vago ou concordar em desativar. Nunca diga "como você pediu" se você estiver tomando uma decisão baseada em regra padrão.
-16. **CONSULTAS**: Sempre use a ação QUERY para listar ou ver registros. NUNCA escreva textos de lista manualmente; o sistema injetará com ícones (🔔 para tarefas e 💰 para gastos).
-17. **DATAS RELATIVAS**: Converta "hoje", "amanhã", "ontem" ou dias da semana em datas ISO usando a Data Atual como base rígida.
-18. **FOCO NO REGISTRO**: Priorize a exibição do modelo de confirmação estruturado da Regra 5. NÃO mostre o saldo mensal automaticamente.
-19. **TÍTULO ORIGINAL**: Ao atualizar horários, mantenha o nome original do compromisso.
-21. **AMBIGUIDADE E SENSO CRÍTICO**: Se o usuário enviar mensagens de conversa (ex: "Mano, estou aqui", "Que cansaço", "Partiu"), NÃO tente registrar nada. Responda casualmente e pergunte se ele quer que você anote algo. Se o usuário questionar uma ação sua (ex: "quando eu pedi isso?"), você deve explicar a lógica sistema de forma educada em vez de repetir a saudação inicial.
-22. **SIGILO TÉCNICO**: Proibido usar termos como JSON, TASK, EXPENSE nas respostas. Use apenas linguagem natural.
-23. **UNICIDADE**: NUNCA duplique a mesma ação no mesmo turno.
-24. **PENSAMENTO ÚNICO**: Registre apenas um item por vez, a menos que haja valores claramente distintos.
-25. **AÇÃO REAL**: Se o usuário pedir para apagar ou limpar, você DEVE gerar a ação DELETE no JSON. NUNCA diga que limpou algo se a ação DELETE não estiver presente.
-26. **VALOR OBRIGATÓRIO (PAY)**: Você NUNCA deve executar a ação PAY sem saber o valor exato. Se o usuário disser "Pagar dentista", pergunte: "Qual o valor do pagamento para eu registrar no seu financeiro?". Só gere a ação PAY quando tiver o valor confirmado.
-27. **LIMPEZA DE DESCRIÇÃO**: Ao extrair descrições ou títulos, remova ruídos e palavras de ligação desnecessárias (ex: "com", "de", "no", "na", "para"). Se o usuário disser "200 com gasolina", a descrição deve ser apenas "Gasolina". Capitalize a primeira letra.
-28. **CRITÉRIO DE REGISTRO**: Priorize o silêncio técnico. Só gere ações se houver um VERBO ou VALOR claros (ex: "Anotar", "Agendar", "Gastei"). Em caso de dúvida, pergunte: "Gostaria que eu registrasse isso na sua agenda ou finanças?".
-29. **CONCLUIR TAREFA**: Se o usuário disser que concluiu, fez, finalizou ou terminou uma tarefa, use a ação DONE com o título exato da tarefa. 
-30. **LIMPEZA DE DUPLICATAS**: Se o usuário pedir para "organizar", "limpar duplicatas" ou "deduplicar", use a ação CLEANUP.
-31. **CONVERSA LIVRE**: Se o usuário perguntar algo que não seja um comando (ex: "quando é meu médico?"), você DEVE usar o campo 'reply' para responder naturalmente baseado na Agenda/Gastos recebidos. NUNCA deixe o 'reply' vazio se houver dúvida.
-32. **STATUS DO ALARME**: Ao confirmar um agendamento, diga no 'reply': "Considerei para amanhã às 12:00". Se perguntado "quando", verifique a Agenda injetada.
+10. **MÚLTIPLOS PEDIDOS**: Gere uma "action" separada para cada um deles.
+11. **SEM REPETIÇÃO**: Se for apenas uma confirmação curta como "Ok", responda apenas com texto.
+12. **COMANDO DELETE**: Se o usuário pedir para limpar ou excluir, use DELETE.
+15. **AGENDAMENTO**: Se houver intenção de lembrete, use TASK com "remind: true".
+31. **CONVERSA LIVRE**: Se houver dúvida ou pergunta direta, responda no 'reply'.
+33. **CONSULTAS (QUERY)**: Use o campo 'type' com um dos valores: "TASKS", "EXPENSES", "INCOMES", "SUMMARY".
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 {
   "actions": [
     { "action": "TASK", "parsedData": { "title": "string", "due_date": "ISO-DATE ou null", "remind": boolean } },
-    { "action": "EXPENSE", "parsedData": { "amount": float, "description": "string", "category": "string" } },
-    { "action": "INCOME", "parsedData": { "amount": float, "description": "string", "category": "string" } },
+    { "action": "EXPENSE", "parsedData": { "amount": float, "description": "string", "category": "string", "date": "ISO-DATE | null" } },
+    { "action": "INCOME", "parsedData": { "amount": float, "description": "string", "category": "string", "date": "ISO-DATE | null" } },
     { "action": "PAY", "parsedData": { "title": "string", "amount": float } },
-    { "action": "DONE", "parsedData": { "title": "string — título da tarefa a marcar como concluída" } },
+    { "action": "DONE", "parsedData": { "title": "string" } },
+    { "action": "QUERY", "parsedData": { "type": "TASKS | EXPENSES | INCOMES | SUMMARY" } },
+    { "action": "DELETE", "parsedData": {} },
     { "action": "CLEANUP", "parsedData": {} },
     { "action": "SUBSCRIBE", "parsedData": {} }
   ],
-  "reply": "Sua resposta natural e humana aqui fatiada em bolhas por \\n\\n"
+  "reply": "Sua resposta natural aqui (OBRIGATÓRIO)"
 }
-
 *Nota: Se o usuário pedir para você 'Parar de mandar mensagem', responda que entendeu e NÃO inclua ações.*`;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
 
-    // 4. Chamada IA (Modo JSON Forçado para estabilidade absoluta)
+    // 4. Chamada IA Principal (Única e Absoluta)
     const upstream = await fetch("https://api.deepseek.com/v1/chat/completions", {
       method:  "POST",
       headers: { "Content-Type":  "application/json", "Authorization": `Bearer ${DEEPSEEK_API_KEY}` },
       body: JSON.stringify({
         model: "deepseek-chat",
         messages: [{ role: "system", "content": sysPrompt }, ...memory, { role: "user", "content": msgText }],
-        temperature: 0.6,
+        temperature: 0.2, 
         response_format: { type: "json_object" } 
       }),
       signal: controller.signal
@@ -309,53 +253,30 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
     } else {
       const dsData = await upstream.json();
       let rawContent = dsData.choices?.[0]?.message?.content || "";
+      console.log(`[${remoteJid}] 🤖 Raw Content:`, rawContent);
       
       try {
-        const s = rawContent.indexOf('{');
-        const e = rawContent.lastIndexOf('}');
-        if (s !== -1 && e !== -1) {
-          aiResponse = JSON.parse(rawContent.substring(s, e + 1));
+        const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          aiResponse = JSON.parse(jsonMatch[0]);
         } else {
           aiResponse.reply = rawContent.trim();
         }
-        console.log(`[${remoteJid}] 🤖 IA Response:`, JSON.stringify(aiResponse, null, 2));
       } catch(e) { 
         console.error(`[${remoteJid}] ❌ Erro Parse JSON AI:`, e.message);
-        aiResponse.reply = rawContent.trim() || "Pode repetir? Tive um pequeno erro de interpretação.";
+        aiResponse.reply = "Deu um curto-circuito interno ao processar isso. Pode repetir?";
       }
     }
 
     // 5. Execução de Ações
     let hasChange = false;
-
-    // 5. Verificação de Segurança de Intenção (Garante que DELETE/QUERY não falhem se a IA travar)
-    const intent = await classifyIntent(msgText);
     const aiActions = aiResponse.actions || [];
     
-    // Filtro de Segurança Humana: Se a frase for uma NEGATIVA (não ative, não quero), cancelamos a intenção de DELETE
-    const isNegativeResponse = /\bn[ãa]o\b.*\b(ative|quero|fa[çc]a|lembre|alarme|notifica|mande)\b/i.test(msgText);
-    
-    if (intent === "DELETE" && !aiActions.some(a => a.action === "DELETE") && !isNegativeResponse) {
-      console.log(`[${remoteJid}] ⚠️ Intent de DELETE detectada pela classifyIntent mas IA não gerou ação. Aguardando confirmação implícita da IA. NÃO forçando.`);
-      // Não força: confiamos apenas na IA para evitar falsos positivos de exclusão.
-    }
-    
-    // 🛡️ NOVO: Se for QUERY e a IA "esqueceu" a ação, nós forçamos aqui
-    // APENAS se não houver outras ações de escrita (TASK, EXPENSE, etc.) para evitar redundância
-    const queryIntents = ["TASK_QUERY", "EXPENSE_QUERY", "INCOME_QUERY", "SUMMARY_QUERY"];
-    const hasWriteAction = aiActions.some(a => ["TASK", "EXPENSE", "INCOME", "PAY", "DONE", "DELETE"].includes(a.action));
-    
-    if (queryIntents.includes(intent) && !aiActions.some(a => a.action === "QUERY") && !hasWriteAction) {
-      console.log(`[${remoteJid}] 🛡️ Intent de QUERY detectada mas ação ausente. Forçando QUERY.`);
-      aiActions.push({ action: "QUERY", parsedData: { type: intent } });
-    }
-
-    // 5. Processamento das Ações (Deduplicação agressiva e Case-Insensitive)
+    // Deduplicação
     const uniqueActions = [];
     const seenActions = new Set();
     for (const act of aiActions) {
-      // Normalizamos a chave para evitar duplicidade por causa de maiúsculas/minúsculas ou espaços
-      const cleanData = JSON.parse(JSON.stringify(act.parsedData));
+      const cleanData = JSON.parse(JSON.stringify(act.parsedData || {}));
       if (cleanData.description) cleanData.description = cleanData.description.toLowerCase().trim();
       if (cleanData.title) cleanData.title = cleanData.title.toLowerCase().trim();
       
@@ -372,203 +293,85 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
         if (action === "EXPENSE" && parsedData.amount) {
           const val = parseFloat(String(parsedData.amount).replace(',', '.').replace(/[^\d.]/g, ''));
           if (val > 0) {
-            const expDate = parsedData.date ? new Date(String(parsedData.date).replace(/Z$/i, "")) : new Date();
             await prisma.expense.create({ 
               data: { 
                 user_id: user.id, 
                 amount: val, 
                 description: parsedData.description || "Gasto",
                 category: parsedData.category || "Outros",
-                date: expDate
+                date: parsedData.date ? new Date(String(parsedData.date).replace(/Z$/i, "")) : new Date()
               } 
             });
             hasChange = true;
           }
-        } else if (action === "TASK" && parsedData.title) {
+        } 
+        else if (action === "TASK" && parsedData.title) {
           const title = cleanTitle(parsedData.title);
           const existing = await prisma.task.findFirst({ where: { user_id: user.id, completed: false, title: { contains: title, mode: 'insensitive' } } });
           const finalDueDate = parsedData.due_date ? new Date(String(parsedData.due_date).replace(/Z$/i, "")) : null;
-          
-          // Ativa lembretes APENAS se "remind: true" vier explicitamente no JSON
           const notifiedFlag = (parsedData.remind === true) ? false : true; 
           
           if (existing) {
-            console.log(`[${remoteJid}] ⏳ ATUALIZANDO TAREFA: "${existing.title}" para ${finalDueDate}...`);
             await prisma.task.update({ 
               where: { id: existing.id }, 
-              data: { 
-                due_date: finalDueDate || existing.due_date, 
-                notified: notifiedFlag, 
-                notified_5min: notifiedFlag 
-              } 
+              data: { due_date: finalDueDate || existing.due_date, notified: notifiedFlag, notified_5min: notifiedFlag } 
             });
           } else {
-            console.log(`[${remoteJid}] 📝 CRIANDO TAREFA: "${title}" para ${finalDueDate}...`);
             await prisma.task.create({ 
-              data: { 
-                user_id: user.id, 
-                title: title, 
-                due_date: finalDueDate,
-                notified: notifiedFlag,
-                notified_5min: notifiedFlag
-              } 
+              data: { user_id: user.id, title: title, due_date: finalDueDate, notified: notifiedFlag, notified_5min: notifiedFlag } 
             });
           }
           hasChange = true;
-        } else if (action === "QUERY") {
-          const raw = msgText.toLowerCase();
-          console.log(`[${remoteJid}] 🔎 Roteando consulta via Classificação de Intenção...`);
+        } 
+        else if (action === "QUERY") {
+          const queryType = parsedData.type || "SUMMARY"; 
+          const dateFilter = { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
 
-          if (intent === "TASK_QUERY" || raw.includes("tarefa") || raw.includes("agenda") || raw.includes("compromisso")) {
-            const list = await prisma.task.findMany({ 
-              where: { user_id: user.id, completed: false }, 
-              orderBy: { due_date: 'asc' } 
-            });
-            aiResponse.reply = list.length > 0 
-              ? `✅ *Sua Agenda de Tarefas:*\n\n` + list.map(t => {
-                  if (!t.due_date) return `🔔 *${t.title}* - [SEM DATA]`;
-                  const d = new Date(t.due_date);
-                  const isEndOfDay = d.getHours() === 23 && d.getMinutes() === 59;
-                  const dateStr = d.toLocaleString("pt-BR", { 
-                    day: "2-digit", month: "2-digit", 
-                    ...(isEndOfDay ? {} : { hour: "2-digit", minute: "2-digit" }),
-                    timeZone: "America/Sao_Paulo" 
-                  });
-                  return `🔔 *${t.title}* - ${dateStr}`;
-                }).join("\n") 
-              : "Sua lista de tarefas está zerada! 🎉";
-          } else if (intent === "EXPENSE_QUERY" || intent === "INCOME_QUERY" || raw.includes("gastos") || raw.includes("receita")) {
-            const dateFilter = raw.includes("mês passado") ? { gte: new Date(now.getFullYear(), now.getMonth() - 1, 1), lt: new Date(now.getFullYear(), now.getMonth(), 1) } : { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
-            
-            if (raw.includes("gastos") || raw.includes("divida") || raw.includes("débito") || raw.includes("contas") || raw.includes("despesa") || intent === "EXPENSE_QUERY") {
-              const exps = await prisma.expense.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
-              aiResponse.reply = formatFinanceRecords(exps, "EXPENSE");
-            } else if (raw.includes("receita") || raw.includes("ganhos") || raw.includes("salario") || intent === "INCOME_QUERY") {
-              const incs = await prisma.income.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
-              aiResponse.reply = formatFinanceRecords(incs, "INCOME");
-            } else {
-              const eSum = await prisma.expense.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
-              const iSum = await prisma.income.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
-              const totalE = eSum._sum.amount || 0;
-              const totalI = iSum._sum.amount || 0;
-              aiResponse.reply = `📊 *Resumo ${raw.includes("passado") ? "do Mês Passado" : "Mensal"}:*\n\n💰 Receita: R$ ${totalI.toFixed(2)}\n💸 Gastos: R$ ${totalE.toFixed(2)}`;
-            }
-          } else if (intent === "SUMMARY_QUERY" || raw.includes("resumo")) {
-            const dateFilter = { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
-            
-            // 1. Tarefas
-            const tasks = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, orderBy: { due_date: 'asc' }, take: 5 });
-            let taskPart = tasks.length > 0 ? `📅 *Agenda Recente:*\n` + tasks.map(t => `🔔 ${t.title}`).join("\n") : "✅ Agenda limpa!";
-            
-            // 2. Financeiro
+          if (queryType === "TASKS") {
+            const list = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, orderBy: { due_date: 'asc' } });
+            aiResponse.reply = list.length > 0 ? `✅ *Sua Agenda de Tarefas:*\n\n` + list.map(t => {
+                if (!t.due_date) return `🔔 *${t.title}*`;
+                const d = new Date(t.due_date);
+                return `🔔 *${t.title}* - ${d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}`;
+            }).join("\n") : "Sua lista de tarefas está zerada! 🎉";
+          } 
+          else if (queryType === "EXPENSES") {
+            const exps = await prisma.expense.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
+            aiResponse.reply = formatFinanceRecords(exps, "EXPENSE");
+          } 
+          else if (queryType === "INCOMES") {
+            const incs = await prisma.income.findMany({ where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' } });
+            aiResponse.reply = formatFinanceRecords(incs, "INCOME");
+          } 
+          else {
+            const tasks = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, take: 5 });
             const eSum = await prisma.expense.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
             const iSum = await prisma.income.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } });
-            const totalE = eSum._sum.amount || 0;
-            const totalI = iSum._sum.amount || 0;
-            let finPart = `\n\n📊 *Balanço Mensal:*\n💰 Receitas: R$ ${totalI.toFixed(2)}\n💸 Gastos: R$ ${totalE.toFixed(2)}`;
-
-            aiResponse.reply = `✨ *Seu Resumo Geral* ✨\n\n${taskPart}${finPart}\n\nO que gostaria de detalhar agora?`;
-          } else {
-            // UNKNOWN ou Fallback: Preserva a resposta original da IA para perguntas gerais
-            console.log(`[${remoteJid}] ❓ Intenção não mapeada. Usando resposta natural da IA.`);
+            aiResponse.reply = `✨ *Seu Resumo Geral* ✨\n\n💰 Receitas: R$ ${(iSum._sum.amount || 0).toFixed(2)}\n💸 Gastos: R$ ${(eSum._sum.amount || 0).toFixed(2)}\n📋 Tarefas pendentes: ${tasks.length}`;
           }
-        } else if (action === "INCOME" && parsedData.amount) {
-          const val = parseFloat(String(parsedData.amount).replace(',', '.').replace(/[^\d.]/g, ''));
-          if (val > 0) {
-            const incDate = parsedData.date ? new Date(String(parsedData.date).replace(/Z$/i, "")) : new Date();
-            await prisma.income.create({ 
-              data: { 
-                user_id: user.id, 
-                amount: val, 
-                description: parsedData.description || "Receita",
-                category: parsedData.category || "Renda",
-                date: incDate
-              } 
-            });
-            hasChange = true;
-          }
-        } else if (action === "DONE") {
+        }
+        else if (action === "DELETE") {
+           const raw = msgText.toLowerCase();
+           if (raw.includes("tudo") || raw.includes("reset")) {
+              await prisma.task.deleteMany({ where: { user_id: user.id } });
+              await prisma.expense.deleteMany({ where: { user_id: user.id } });
+              aiResponse.reply = "🗑️ *RESET COMPLETO!* Removi tudo.";
+           } else if (raw.includes("gasto") || raw.includes("financeiro")) {
+              await prisma.expense.deleteMany({ where: { user_id: user.id } });
+              aiResponse.reply = "🗑️ *FINANCEIRO LIMPO!*";
+           } else {
+              await prisma.task.deleteMany({ where: { user_id: user.id } });
+              aiResponse.reply = "🗑️ *TAREFAS LIMPAS!*";
+           }
+           hasChange = true;
+        }
+        else if (action === "DONE") {
           const task = await prisma.task.findFirst({ where: { user_id: user.id, completed: false, title: { contains: parsedData.title || "", mode: 'insensitive' } } });
           if (task) {
             await prisma.task.update({ where: { id: task.id }, data: { completed: true } });
-            console.log(`[${remoteJid}] ✅ Tarefa concluída: ${task.title}`);
           }
-        } else if (action === "CLEANUP") {
-          console.log(`[${remoteJid}] 🧹 Iniciando limpeza geral de duplicatas...`);
-          
-          // 1. Limpeza de Tarefas
-          const tasks = await prisma.task.findMany({ where: { user_id: user.id, completed: false } });
-          const seenT = new Set();
-          let remT = 0;
-          for (const t of tasks) {
-            const k = t.title.toLowerCase().trim();
-            if (seenT.has(k)) { await prisma.task.delete({ where: { id: t.id } }); remT++; } else { seenT.add(k); }
-          }
-
-          // 2. Limpeza de Gastos (Mesmo valor, descrição e dia)
-          const exps = await prisma.expense.findMany({ where: { user_id: user.id } });
-          const seenE = new Set();
-          let remE = 0;
-          for (const e of exps) {
-            const dateKey = e.date.toISOString().split('T')[0];
-            const k = `${e.amount}-${e.description.toLowerCase().trim()}-${dateKey}`;
-            if (seenE.has(k)) { await prisma.expense.delete({ where: { id: e.id } }); remE++; } else { seenE.add(k); }
-          }
-          
-          aiResponse.reply = `✨ *Limpeza concluída!* \n\nRemovi ${remT} tarefas duplicadas e ${remE} registros financeiros repetidos do seu histórico. ✅`;
-          console.log(`[${remoteJid}] ✨ Limpeza concluída: ${remT} tarefas, ${remE} gastos.`);
-        } else if (action === "DELETE") {
-          console.log(`[${remoteJid}] 🗑️ DELETE acionado`);
-          const raw = msgText.toLowerCase();
-
-          const cleanTasks = raw.includes("tarefa") || raw.includes("agenda");
-          const cleanFinance = ["gasto", "despesa", "receita", "ganho", "financeiro", "dinheiro"].some(k => raw.includes(k));
-          const cleanAll = ["tudo", "geral", "histórico", "reset"].some(k => raw.includes(k));
-
-          const beforeT = await prisma.task.count({ where: { user_id: user.id } });
-          const beforeE = await prisma.expense.count({ where: { user_id: user.id } });
-
-          if (cleanAll) {
-            console.log(`[${remoteJid}] 🗑️ RESET TOTAL`);
-            await prisma.task.deleteMany({ where: { user_id: user.id } });
-            await prisma.expense.deleteMany({ where: { user_id: user.id } });
-            await prisma.income.deleteMany({ where: { user_id: user.id } });
-            aiResponse.reply = "🗑️ *RESET COMPLETO!* \n\nRemovi todas as suas tarefas e registros financeiros. ✨";
-          } else if (cleanFinance) {
-            console.log(`[${remoteJid}] 💸 LIMPANDO FINANCEIRO`);
-            const dExp = await prisma.expense.deleteMany({ where: { user_id: user.id } });
-            const dInc = await prisma.income.deleteMany({ where: { user_id: user.id } });
-            aiResponse.reply = `🗑️ *FINANCEIRO LIMPO!* \n\nRemovi ${dExp.count} gastos e ${dInc.count} receitas do seu histórico. 💸`;
-          } else if (cleanTasks) {
-            console.log(`[${remoteJid}] 📅 LIMPANDO TAREFAS`);
-            const del = await prisma.task.deleteMany({ where: { user_id: user.id } });
-            aiResponse.reply = `🗑️ *TAREFAS LIMPAS!* \n\nRemovi as ${del.count} tarefas da sua agenda. ✅`;
-          } else {
-            console.log(`[${remoteJid}] ⚠️ DELETE não reconhecido`);
-            aiResponse.reply = "O que exatamente você quer limpar? Suas *tarefas* ou seus *gastos*?";
-          }
-
-          const afterT = await prisma.task.count({ where: { user_id: user.id } });
-          const afterE = await prisma.expense.count({ where: { user_id: user.id } });
-          console.log(`[${remoteJid}] 🗑️ Stats Remoção - Tarefas: ${beforeT}->${afterT}, Gastos: ${beforeE}->${afterE}`);
-          hasChange = true;
-        } else if (action === "PAY" && parsedData.amount) {
-          const valPay = parseFloat(String(parsedData.amount).replace(',', '.').replace(/[^\d.]/g, ''));
-          if (valPay > 0) {
-            console.log(`[${remoteJid}] 💳 Ação PAY: Registrando R$ ${valPay} como despesa...`);
-            await prisma.expense.create({
-              data: {
-                user_id: user.id,
-                amount: valPay,
-                description: parsedData.title || "Pagamento",
-                category: "Contas/Pagamentos",
-                date: new Date()
-              }
-            });
-            hasChange = true;
-          }
-        } else if (action === "SUBSCRIBE") {
-          console.log(`[${remoteJid}] 💰 Gerando Checkout Stripe...`);
+        }
+        else if (action === "SUBSCRIBE") {
           const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
@@ -583,14 +386,14 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
       } catch(e) { console.error("Erro DB Action:", e.message); }
     }
 
-    // 6. Resposta Final (Deduplicação e Tratamento de Listas)
-    const isReturningUser = history.length > 0;
-    const fallbackMsg = isReturningUser 
-      ? "Desculpe, não entendi bem. Como tenho acesso às suas tarefas e gastos, pode reformular a pergunta ou pedir um resumo? 🚀"
-      : "Olá! Sou seu Assessor Nico. Como posso te ajudar com suas finanças ou tarefas hoje? 🚀";
-    
-    const rawReply = (aiResponse.reply || (hasChange ? "Tudo certo! ✅" : fallbackMsg)).trim();
-    
+    // 6. Resposta Final (Blindada contra amnésia)
+    let rawReply = aiResponse.reply?.trim();
+    if (!rawReply) {
+      if (hasChange) rawReply = "Tudo certo! Atualizei seus registros. ✅";
+      else if (isFirst) rawReply = "Olá! Sou seu Assessor Nico. Como posso te ajudar com suas finanças ou tarefas hoje? 🚀";
+      else rawReply = "Pode me dar mais detalhes do que você precisa?";
+    }
+
     // Se for uma lista financeira/agenda ou uma mensagem muito longa, enviamos em bloco ÚNICO
     const isList = rawReply.includes("Seus Gastos por Categoria") || rawReply.includes("Sua Agenda de Tarefas") || rawReply.length > 800;
     
@@ -609,8 +412,6 @@ Você é o Assessor Nico, mentor de organização e finanças. Para você, "Dív
     await prisma.message.create({ data: { user_id: user.id, role: "assistant", content: contentToSave } });
 
     const instanceName = instance || "main";
-
-    console.log(`[${remoteJid}] 📤 Iniciando envio de ${parts.length} partes...`);
 
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i].trim();
