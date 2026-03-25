@@ -634,11 +634,86 @@ function LandingPage() {
              ))}
           </div>
           
-          <div className="mt-16 text-center">
-             <p className="text-[#64748B] font-body mb-6 font-medium text-lg italic">O Nico já está pronto para te atender.</p>
-             <a href="https://buy.stripe.com/test_cNi00k1fGeeg3gK0Sh93y01" className="inline-flex items-center gap-3 bg-[#7C3AED] text-white font-headline font-bold px-12 py-5 rounded-full hover:bg-[#6D28D9] transition-all shadow-xl shadow-[#7C3AED]/20 tracking-widest uppercase">
-               CONTRATAR MEU NICO
-             </a>
+          {/* Big Soft Premium Card - Centered Layout */}
+          <div className="mt-24 relative group">
+            <div className="absolute -inset-8 bg-gradient-to-r from-[#7C3AED]/10 to-transparent rounded-[5rem] blur-3xl opacity-0 group-hover:opacity-100 transition duration-1000"></div>
+            
+            <div className="relative p-10 md:p-20 rounded-[3.5rem] bg-white border border-[#F1F5F9] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.06)] overflow-hidden transition-all duration-700 hover:shadow-[0_80px_120px_-30px_rgba(124,58,237,0.12)]">
+              
+              <div className="absolute -top-32 -left-32 w-[30rem] h-[30rem] bg-[#7C3AED]/5 blur-[120px] rounded-full pointer-events-none"></div>
+              <div className="absolute -bottom-32 -right-32 w-[35rem] h-[35rem] bg-indigo-50/50 blur-[140px] rounded-full pointer-events-none"></div>
+              
+              <div className="relative z-10 flex flex-col items-center text-center">
+                {/* Badge */}
+                <div className="inline-flex items-center gap-2 bg-[#F5F3FF] text-[#7C3AED] px-5 py-2 rounded-full text-[0.65rem] font-black uppercase tracking-[0.25em] mb-10 border border-[#DDD6FE]">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#7C3AED] opacity-40"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#7C3AED]"></span>
+                  </span>
+                  Acesso Imediato Liberado
+                </div>
+                
+                <h3 className="text-4xl md:text-[5rem] font-headline font-black text-[#111827] leading-[1] tracking-tighter mb-8 max-w-4xl">
+                  Menos planilhas,<br />
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#7C3AED] via-[#9F67FF] to-[#7C3AED] animate-gradient-x">mais vida real.</span>
+                </h3>
+                
+                <p className="text-[#64748B] font-body text-xl md:text-2xl leading-relaxed mb-12 max-w-2xl">
+                  O Nico é o assistente que você sempre quis, mas nunca teve. Simples, humano e 100% focado na sua paz de espírito.
+                </p>
+                
+                {/* CTA Action - Centered and Enlarged */}
+                <div className="flex flex-col items-center gap-6 mb-16 w-full max-w-md">
+                  <a href="https://buy.stripe.com/test_cNi00k1fGeeg3gK0Sh93y01" className="group/btn relative w-full">
+                    <div className="absolute -inset-2 bg-gradient-to-r from-[#7C3AED] to-[#9F67FF] rounded-full blur-xl opacity-20 group-hover/btn:opacity-60 transition duration-500 group-hover/btn:duration-200"></div>
+                    
+                    <div className="relative flex items-center justify-center gap-4 bg-[#7C3AED] text-white font-headline font-black text-xl px-16 py-8 md:py-9 rounded-full shadow-[0_20px_40px_rgba(124,58,237,0.3)] transition-all duration-300 transform group-hover/btn:scale-[1.03] group-hover/btn:shadow-[0_25px_50px_rgba(124,58,237,0.4)] active:scale-95 tracking-widest uppercase">
+                      CONTRATAR MEU NICO
+                      <span className="material-symbols-outlined font-black text-2xl group-hover/btn:translate-x-2 transition-transform">arrow_right_alt</span>
+                    </div>
+                  </a>
+                  
+                  <div className="flex flex-col items-center gap-2">
+                    <p className="text-[#94A3B8] text-[10px] font-black uppercase tracking-[0.3em] opacity-80">
+                      R$ 9,90/mês • Sem fidelidade
+                    </p>
+                    <div className="flex items-center gap-3 opacity-40 grayscale hover:grayscale-0 transition-all cursor-default">
+                      <img src="https://upload.wikimedia.org/wikipedia/commons/b/ba/Stripe_Logo%2C_revised_2016.svg" alt="Stripe" className="h-4" />
+                      <div className="w-1 h-1 rounded-full bg-slate-400"></div>
+                      <span className="text-[9px] font-bold text-slate-500 uppercase">Pagamento Seguro</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Social Proof - Centered Footer */}
+                <div className="flex flex-col items-center gap-4 border-t border-[#F1F5F9] pt-12 w-full max-w-xl">
+                  <div className="flex -space-x-3 mb-2">
+                    {[1, 2, 3, 4, 5].map(i => (
+                      <div key={i} className="w-12 h-12 rounded-full border-[3px] border-white bg-[#F1F5F9] overflow-hidden shadow-sm transition-transform hover:scale-110 hover:z-20">
+                        <img src={`https://i.pravatar.cc/100?img=${i+20}`} alt="user" className="w-full h-full object-cover" />
+                      </div>
+                    ))}
+                    <div className="w-12 h-12 rounded-full border-[3px] border-white bg-[#7C3AED] text-white flex items-center justify-center text-[10px] font-black shadow-sm z-10">
+                      +500
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <div className="flex gap-0.5 text-[#EAB308] mb-2">
+                      {[...Array(5)].map((_, i) => (
+                        <span key={i} className="material-symbols-outlined text-[1rem]" style={{fontVariationSettings: "'FILL' 1"}}>star</span>
+                      ))}
+                    </div>
+                    <p className="text-[#64748B] font-body text-sm font-medium">
+                      Mais de <span className="text-[#111827] font-bold">500 pessoas</span> organizadas essa semana.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Subtle Glass Detail Overlay */}
+                <div className="absolute top-10 right-10 w-32 h-32 glass-shape rounded-3xl rotate-12 float-slow opacity-[0.03] pointer-events-none"></div>
+                <div className="absolute bottom-20 left-10 w-20 h-20 glass-shape rounded-full float-medium opacity-[0.03] pointer-events-none"></div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
