@@ -54,6 +54,8 @@ function formatFinanceRecords(records, type = "EXPENSE") {
     return type === "EXPENSE" ? "Não encontrei registros de gastos. 📂" : "Não encontrei registros de receitas. 📂";
   }
 
+  const groups = {};
+  let totalAll = 0;
   const catEmojis = {
     // Gastos
     "Alimentação": "🍕", "Lazer": "🎭", "Saúde": "💊", "Educação": "📚",
@@ -127,7 +129,7 @@ async function processNicoCore(remoteJid, msgText, instance) {
         user = await prisma.user.create({ data: { phone_number: remoteJid, status: "INACTIVE" } });
       }
 
-      const blockMsg = `Olá! Sou o Nico, seu Assessor Financeiro. 🤖📈\n\nNotei que você ainda não ativou sua assinatura. Para ter acesso à minha inteligência para organizar seus gastos e tarefas, você precisa garantir sua vaga na nossa página oficial.\n\n🎁 *DETALHE:* Você ganha 30 DIAS TOTALMENTE GRÁTIS! Só é cobrado após o primeiro mês.\n\n🔗 *Garanta seu acesso agora:* https://www.nicoassessor.com/\n\n_Assim que concluir o cadastro, seu acesso será liberado aqui no WhatsApp automaticamente!_`;
+      const blockMsg = `Olá! Sou o Nico, seu Assessor Financeiro. 🤖📈\n\nNotei que você ainda não ativou sua assinatura. Para ter acesso à minha inteligência para organizar seus gastos e tarefas, você precisa garantir sua vaga na nossa página oficial.\n\n🎁 DETALHE: Você ganha 30 DIAS TOTALMENTE GRÁTIS! Só é cobrado após o primeiro mês.\n\n🔗 Garanta seu acesso agora: https://www.nicoassessor.com/\n\n_Assim que concluir o cadastro, seu acesso será liberado aqui no WhatsApp automaticamente!_`;
 
       await sendText(remoteJid, blockMsg, instance || "main");
       return;
@@ -213,8 +215,8 @@ NUNCA use gírias como "chefe", "mano", "bora", "show", nem exageros informais. 
 12. **AGENDAMENTO**: Se houver intenção de lembrete (ex: "me lembre", "anote aí", "marcar reunião"), use TASK com "remind: true".
 13. **INTELIGÊNCIA DE CONTEXTO**: Você entende erros de digitação. Se o usuário disser "digitei errado", "errei o valor", seja proativo: sugira que ele peça para apagar o registro e se coloque à disposição para refazer.
 14. **SEM ASTERISCOS**: NUNCA utilize o caractere asterisco (*) para negrito, itálico ou qualquer tipo de formatação. Escreva o texto totalmente limpo, sem o caractere *.
-15. **PERSONALIDADE NATURAL**: Seja cordial como um gerente premium. Se você souber o nome real do usuário, use-o com moderação. Se houver erro ou frustração dele, seja empático e ofereça ajuda imediata para corrigir.
-16. **CANCELAR LEMBRETE**: Se o usuário pedir para "cancelar o alarme" ou "tirar o lembrete" (mas manter a tarefa na agenda), use a ação TOGGLE_ALARM. O target pode ser "todos" (para todos os lembretes) ou o título específico da tarefa.
+15. **PROIBIDO LISTAR MANUALMENTE**: NUNCA escreva listas de gastos, agenda ou extratos manualmente no campo 'reply'. Se o usuário pedir para listar, você DEVE usar a ação QUERY e escrever apenas uma frase curta e amigável no 'reply' (ex: "Claro, estou buscando aqui seus registros..."). Deixe que o sistema gere a lista para você.
+16. **PERSONALIDADE NATURAL**: Seja cordial como um gerente premium. Se você souber o nome real do usuário, use-o com moderação. Se houver erro ou frustração dele, seja empático e ofereça ajuda imediata para corrigir.
 17. **CONVERSA LIVRE E OBRIGATÓRIA**: Você é um assessor com personalidade! O campo 'reply' NUNCA deve ficar vazio. Se o usuário fizer uma pergunta casual ("quem eu sou?", "tudo bem?"), responda de forma natural e proativa usando o nome dele (que está no Contexto Atual).
 18. **INTELIGÊNCIA DE INTENÇÃO**: Frases como "o que vou fazer hoje?", "meus compromissos", "minha agenda" ou "quais minhas tarefas?" significam que o usuário quer ver a agenda. Você DEVE gerar a ação QUERY com type "TASKS" e escrever no 'reply' algo como "Deixa comigo, fui buscar sua agenda:"
 
@@ -336,7 +338,20 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
         } 
         else if (action === "QUERY") {
           const queryType = parsedData.type || "SUMMARY"; 
-          const dateFilter = { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
+          let dateFilter = { gte: new Date(now.getFullYear(), now.getMonth(), 1) };
+          
+          if (parsedData.date) {
+            const rawDate = String(parsedData.date);
+            const monthMatch = rawDate.match(/^(\d{4})-(\d{2})$/);
+            if (monthMatch) {
+              const year = parseInt(monthMatch[1]);
+              const month = parseInt(monthMatch[2]) - 1;
+              dateFilter = { gte: new Date(year, month, 1), lte: new Date(year, month + 1, 0, 23, 59, 59) };
+            } else {
+              const d = new Date(rawDate);
+              dateFilter = { gte: new Date(d.setHours(0,0,0,0)), lte: new Date(d.setHours(23,59,59,999)) };
+            }
+          }
           let queryResultText = ""; 
 
           if (queryType === "TASKS") {
