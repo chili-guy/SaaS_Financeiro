@@ -416,6 +416,7 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
             line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
             mode: 'subscription',
             client_reference_id: remoteJid,
+            phone_number_collection: { enabled: true },
             success_url: `${APP_URL}/success.html`,
             cancel_url: `${APP_URL}/cancel.html`,
           });
