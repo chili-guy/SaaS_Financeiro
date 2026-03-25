@@ -129,7 +129,7 @@ async function processNicoCore(remoteJid, msgText, instance) {
         user = await prisma.user.create({ data: { phone_number: remoteJid, status: "INACTIVE" } });
       }
 
-      const blockMsg = `Olá! Sou o Nico, seu Assessor Financeiro. 🤖📈\n\nNotei que você ainda não ativou sua assinatura. Para ter acesso à minha inteligência para organizar seus gastos e tarefas, você precisa garantir sua vaga na nossa página oficial.\n\n🎁 DETALHE: Você ganha 30 DIAS TOTALMENTE GRÁTIS! Só é cobrado após o primeiro mês.\n\n🔗 Garanta seu acesso agora: https://www.nicoassessor.com/\n\n_Assim que concluir o cadastro, seu acesso será liberado aqui no WhatsApp automaticamente!_`;
+      const blockMsg = `Olá! Sou o Nico, seu Assessor Financeiro. 🤖📈\n\nNotei que você ainda não ativou sua assinatura. Para ter acesso à minha inteligência para organizar seus gastos e tarefas, você precisa garantir sua vaga na nossa página oficial.\n\n🎁 DETALHE: Você ganha 30 DIAS TOTALMENTE GRÁTIS! Só é cobrado após o primeiro mês.\n\n🔗 Garanta seu acesso agora: https://www.nicoassessor.com/\n\nAssim que concluir o cadastro, seu acesso será liberado aqui no WhatsApp automaticamente!`;
 
       await sendText(remoteJid, blockMsg, instance || "main");
       return;
@@ -237,7 +237,7 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
   ],
   "reply": "Sua resposta natural, humana e com emojis aqui. OBRIGATÓRIO preencher se for um bate-papo ou pergunta."
 }
-*Nota: Se o usuário pedir para você 'Parar de mandar mensagem', responda que entendeu e NÃO inclua ações.*`;
+Nota: Se o usuário pedir para você 'Parar de mandar mensagem', responda que entendeu e NÃO inclua ações.`;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 25000);
@@ -503,7 +503,9 @@ Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuári
       }
     }
 
-    // QA: Agora o Nico envia tudo em um único balão de mensagem, mantendo a formatação original da IA.
+    // Blindagem Final: Remove qualquer caractere de formatação (* ou _) antes de enviar
+    rawReply = rawReply.replace(/[*_]/g, '');
+
     const parts = [rawReply];
 
     const finalReply = parts.join("\n\n");
