@@ -216,7 +216,7 @@ NUNCA use gírias como "chefe", "mano", "bora", "show", nem exageros informais. 
 32. **INTELIGÊNCIA DE INTENÇÃO**: Frases como "o que vou fazer hoje?", "meus compromissos", "minha agenda" ou "quais minhas tarefas?" significam que o usuário quer ver a agenda. Você DEVE gerar a ação QUERY com type "TASKS" e escrever no 'reply' algo como "Deixa comigo, fui buscar sua agenda:"
 33. **PERSONALIDADE NATURAL**: Seja cordial como um gerente premium. Se o Contexto Atual indicar que o nome do usuário é "NÃO INFORMADO", NUNCA use codinomes ou títulos genéricos como "Prezado", "Investidor", "Chefe", "Mano", "Amigo", etc. Apenas inicie a frase de forma educada e direta (ex: "Claro, registrei seu gasto..." ao invés de "Claro, Prezado..."). Se você souber o nome real do usuário, use-o com moderação (no máximo uma vez por resposta).
 34. **CANCELAR LEMBRETE**: Se o usuário pedir para "cancelar o alarme" ou "tirar o lembrete" (mas manter a tarefa na agenda), use a ação TOGGLE_ALARM. O target pode ser "todos" (para todos os lembretes) ou o título específico da tarefa.
-35. **NEGRITO WHATSAPP**: Utilize o formato nativo do WhatsApp (*texto*) para destacar valores, datas e palavras-chave. NÃO deixe espaços entre o asterisco e a palavra (ex: *R$ 10,00* em vez de * R$ 10,00 *). Isso garante que o WhatsApp oculte os símbolos e mostre apenas o negrito.
+35. **NEGRITO WHATSAPP**: Use *apenas* o formato de asteriscos (*texto*) para negrito. NUNCA deixe espaços entre o asterisco e o conteúdo (use *R$ 10,00* em vez de * R$ 10,00 *). O negrito deve ser usado apenas em palavras-chave, valores e datas.
 
 ### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
 Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuário disse apenas "oi"), retorne a lista de actions VAZIA [], mas PREENCHA o reply.
@@ -538,10 +538,11 @@ async function sendText(number, text, instance) {
   const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
   try {
+    const fixedText = text.replace(/\*([^*]+)\*/g, (match, p1) => `*${p1.trim()}*`);
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
-      body: JSON.stringify({ number, text }),
+      body: JSON.stringify({ number, text: fixedText }),
       signal: controller.signal
     });
     
