@@ -231,26 +231,17 @@ Retorne APENAS um JSON válido, sem texto fora dele, sem blocos de código. Estr
    IMPORTANTE: Você DEVE usar QUERY para qualquer pedido de visualização. Nunca escreva listas no campo "reply".
    Tipos disponíveis: "TASKS", "EXPENSES", "INCOMES", "SUMMARY"
 
-   Exemplo input: "quanto gastei esse mês"
-   → { "action": "QUERY", "parsedData": { "type": "EXPENSES", "date": null } }
+   Exemplo input: "quero ver os meus gastos" / "liste minhas despesas" / "quanto gastei?"
+   → { "actions": [{ "action": "QUERY", "parsedData": { "type": "EXPENSES", "date": null } }], "reply": "Aqui estão seus gastos:" }
 
-   Exemplo input: "minha agenda"
-   → { "action": "QUERY", "parsedData": { "type": "TASKS", "date": null } }
+   Exemplo input: "minha agenda" / "tenho algum compromisso?" / "o que tenho pra amanhã?" / "o que tenho hoje?"
+   → { "actions": [{ "action": "QUERY", "parsedData": { "type": "TASKS", "date": null } }], "reply": "Aqui está sua agenda:" }
 
-   Exemplo input: "o que tenho pra amanhã?"
-   → { "action": "QUERY", "parsedData": { "type": "TASKS", "date": null } }
-
-   Exemplo input: "o que tenho hoje?"
-   → { "action": "QUERY", "parsedData": { "type": "TASKS", "date": null } }
-
-   Exemplo input: "tenho algum compromisso?"
-   → { "action": "QUERY", "parsedData": { "type": "TASKS", "date": null } }
-
-   Exemplo input: "meu resumo / saldo"
-   → { "action": "QUERY", "parsedData": { "type": "SUMMARY", "date": null } }
+   Exemplo input: "meu resumo" / "meu saldo"
+   → { "actions": [{ "action": "QUERY", "parsedData": { "type": "SUMMARY", "date": null } }], "reply": "Aqui está seu resumo:" }
 
    Exemplo input: "minhas receitas de março"
-   → { "action": "QUERY", "parsedData": { "type": "INCOMES", "date": "2025-03" } }
+   → { "actions": [{ "action": "QUERY", "parsedData": { "type": "INCOMES", "date": "2025-03" } }], "reply": "Aqui estão suas receitas de março:" }
 
 5. CONCLUIR TAREFA → action "DONE"
    Gatilhos: "concluí", "terminei", "feito", "finalizado", "já fiz", "marcar como feito"
@@ -289,8 +280,9 @@ R2. REPLY OBRIGATÓRIO: O campo "reply" nunca fica vazio. Se só registrou, conf
     🏷️ Categoria: [categoria]"
 
 R3. CONSULTAS: Para qualquer pedido de "ver", "listar", "mostrar" ou "extrato", use SEMPRE a action QUERY.
-    No campo "reply", escreva apenas uma frase curta (ex: "Aqui estão seus registros:").
-    NUNCA reproduza listas ou valores no "reply" quando usar QUERY — o sistema já faz isso.
+    No campo "reply", escreva apenas uma frase curta introdutória (ex: "Aqui estão seus gastos:").
+    NUNCA reproduza listas, valores ou dados no "reply" quando usar QUERY — o sistema já exibe os dados.
+    PROIBIDO usar "Consulta realizada" ou qualquer label técnico no "reply".
 
 R4. SEM ALUCINAÇÃO: Use apenas os dados em "DADOS DO USUÁRIO". Se não estiver lá, diga que não encontrou.
 
@@ -401,6 +393,19 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
 
     // Garante que actions é sempre um array válido
     if (!Array.isArray(aiResponse.actions)) aiResponse.actions = [];
+
+    // Safeguard: IA retornou "Consulta realizada: X" como reply sem gerar a QUERY action.
+    // Detecta e injeta a action correta para que os dados sejam buscados normalmente.
+    {
+      const crMatch = (aiResponse.reply || "").match(/^Consulta realizada:\s*(TASKS|EXPENSES|INCOMES|SUMMARY)/i);
+      const hasQueryAct = aiResponse.actions.some(a => a?.action === "QUERY");
+      if (crMatch && !hasQueryAct) {
+        const queryType = crMatch[1].toUpperCase();
+        console.warn(`[${remoteJid}] ⚠️ Safeguard: IA retornou label interno. Injetando QUERY ${queryType}.`);
+        aiResponse.actions.push({ action: "QUERY", parsedData: { type: queryType, date: null } });
+        aiResponse.reply = "";
+      }
+    }
 
     // Deduplicação de ações idênticas
     const seenKeys = new Set();
