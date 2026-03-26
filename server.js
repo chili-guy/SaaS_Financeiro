@@ -1,7 +1,7 @@
 process.env.TZ = "America/Sao_Paulo";
 import 'dotenv/config';
 import http from "http";
-import fs   from "fs";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { PrismaClient } from "@prisma/client";
@@ -11,28 +11,25 @@ import './scheduler.js';
 // --- Configuração e Iniciação ---
 const prisma = new PrismaClient();
 const __dir = path.dirname(fileURLToPath(import.meta.url));
-
-const PORT                 = process.env.PORT || 3000;
-const EVO_URL              = process.env.EVOLUTION_API_URL || "http://127.0.0.1:8080";
-const EVO_KEY              = process.env.EVOLUTION_API_KEY || "FInAgentAPISecretKey_2026";
-const DEEPSEEK_API_KEY     = process.env.DEEPSEEK_API_KEY || "SUA_CHAVE_AQUI";
-const STRIPE_KEY           = process.env.STRIPE_SECRET_KEY || "sk_test_...";
-const stripe               = new Stripe(STRIPE_KEY);
-
-const STRIPE_PRICE_ID      = process.env.STRIPE_PRICE_ID || "price_...";
-const APP_URL              = process.env.APP_URL || "http://localhost:3000";
+const PORT = process.env.PORT || 3000;
+const EVO_URL = process.env.EVOLUTION_API_URL || "http://127.0.0.1:8080";
+const EVO_KEY = process.env.EVOLUTION_API_KEY || "FInAgentAPISecretKey_2026";
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || "SUA_CHAVE_AQUI";
+const STRIPE_KEY = process.env.STRIPE_SECRET_KEY || "sk_test_...";
+const stripe = new Stripe(STRIPE_KEY);
+const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID || "price_...";
+const APP_URL = process.env.APP_URL || "http://localhost:3000";
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
-const RESET_SECRET         = process.env.RESET_SECRET || "";
+const RESET_SECRET = process.env.RESET_SECRET || "";
 
-// --- Buffer de Mensagens (QA: Debounce para evitar múltiplas notificações) ---
+// --- Buffer de Mensagens ---
 const messageBuffers = new Map();
-const processedIds   = new Set(); 
-const userLocks      = new Set(); // Trava de processamento por usuário
-const DEBOUNCE_TIME  = 2500; 
+const processedIds = new Set();
+const userLocks = new Set();
+const DEBOUNCE_TIME = 500;
 
-/**
- * Helper para limpar títulos de tarefas (Remove "Marcar", "Lembrar", etc)
- */
+// ─── Utilitários ──────────────────────────────────────────────────────────────
+
 function cleanTitle(title) {
   if (!title) return "";
   return title
@@ -41,27 +38,21 @@ function cleanTitle(title) {
     .replace(/^\w/, (c) => c.toUpperCase());
 }
 
-/**
- * Função de Classificação de Intenção via IA (Reforço de Precisão)
- */
-
-
-/**
- * Formata os registros financeiros agrupados por categoria (Relatório Premium Padronizado)
- */
 function formatFinanceRecords(records, type = "EXPENSE") {
   if (!records || !records.length) {
-    return type === "EXPENSE" ? "Não encontrei registros de gastos. 📂" : "Não encontrei registros de receitas. 📂";
+    return type === "EXPENSE"
+      ? "Não encontrei registros de gastos este mês. 📂"
+      : "Não encontrei registros de receitas este mês. 📂";
   }
 
-  const groups = {};
-  let totalAll = 0;
   const catEmojis = {
-    // Gastos
     "Alimentação": "🍕", "Lazer": "🎭", "Saúde": "💊", "Educação": "📚",
     "Transporte": "🚗", "Moradia": "🏠", "Cuidados Pessoais": "✨", "Serviços": "🛠️",
     "Mercado": "🛒", "Assinaturas": "📱", "Vendas": "🛍️", "Salário": "🏦", "Freelance": "💻"
   };
+
+  const groups = {};
+  let totalAll = 0;
 
   records.forEach(r => {
     const c = r.category || (type === "EXPENSE" ? "Outros" : "Renda");
@@ -71,22 +62,19 @@ function formatFinanceRecords(records, type = "EXPENSE") {
     totalAll += r.amount;
   });
 
-  const sorted = Object.entries(groups).sort((a,b) => b[1].total - a[1].total);
+  const sorted = Object.entries(groups).sort((a, b) => b[1].total - a[1].total);
   let reply = type === "EXPENSE" ? "📉 EXTRATO DE GASTOS" : "📈 EXTRATO DE RECEITAS";
   reply += "\n━━━━━━━━━━━━━━━━━━\n\n";
 
   for (const [cat, data] of sorted) {
     const emoji = catEmojis[cat] || (type === "EXPENSE" ? "📦" : "💵");
     const pct = totalAll > 0 ? ((data.total / totalAll) * 100).toFixed(0) : 0;
-    
     reply += `${emoji} ${cat.toUpperCase()} (${pct}%)\n`;
-    
     data.items.forEach(i => {
       const d = new Date(i.date || new Date());
       const dStr = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
       reply += `▫️ R$ ${i.amount.toFixed(2)} — ${i.description} (${dStr})\n`;
     });
-    
     reply += `└─ Subtotal: R$ ${data.total.toFixed(2)}\n\n`;
   }
 
@@ -95,474 +83,596 @@ function formatFinanceRecords(records, type = "EXPENSE") {
   return reply;
 }
 
-/**
- * Motor Central de Inteligência do Nico
- */
+// ─── Motor Central ────────────────────────────────────────────────────────────
+
 async function processNicoCore(remoteJid, msgText, instance) {
   if (userLocks.has(remoteJid)) {
-    console.log(`[${remoteJid}] 🔒 Usuário já está sendo processado. Ignorando concorrência.`);
+    console.log(`[${remoteJid}] 🔒 Processando outro pedido, ignorando concorrência.`);
     return;
   }
   userLocks.add(remoteJid);
 
   try {
     const now = new Date();
-    // 1. Controle de Assinante (Apenas para Pagos ou Trial via Stripe)
-    // Inteligência de busca: Tenta encontrar o usuário com ou sem o nono dígito (Brasil)
-    let phoneNo9 = remoteJid.replace(/^55(\d{2})9/, '55$1');
-    let phoneWith9 = remoteJid.replace(/^55(\d{2})(\d{8})@/, '55$19$2@');
-    
-    let user = await prisma.user.findFirst({ 
-      where: { 
-        OR: [
-          { phone_number: remoteJid },
-          { phone_number: phoneNo9 },
-          { phone_number: phoneWith9 }
-        ]
-      } 
+
+    // 1. Busca usuário (suporte a nono dígito BR)
+    const phoneNo9 = remoteJid.replace(/^55(\d{2})9/, '55$1');
+    const phoneWith9 = remoteJid.replace(/^55(\d{2})(\d{8})@/, '55$19$2@');
+
+    let user = await prisma.user.findFirst({
+      where: { OR: [{ phone_number: remoteJid }, { phone_number: phoneNo9 }, { phone_number: phoneWith9 }] }
     });
-    
-    // Se o usuário não existe ou não está ativo, bloqueamos o acesso
+
     if (!user || user.status !== "ACTIVE") {
-      // Se não existe mas é um número novo, criamos como INACTIVE
-      if (!user) {
-        user = await prisma.user.create({ data: { phone_number: remoteJid, status: "INACTIVE" } });
-      }
-
-      const blockMsg = `Olá! Sou o Nico, seu Assessor Financeiro. 🤖📈\n\nNotei que você ainda não ativou sua assinatura. Para ter acesso à minha inteligência para organizar seus gastos e tarefas, você precisa garantir sua vaga na nossa página oficial.\n\n🎁 DETALHE: Você ganha 30 DIAS TOTALMENTE GRÁTIS! Só é cobrado após o primeiro mês.\n\n🔗 Garanta seu acesso agora: https://www.nicoassessor.com/\n\nAssim que concluir o cadastro, seu acesso será liberado aqui no WhatsApp automaticamente!`;
-
-      await sendText(remoteJid, blockMsg, instance || "main");
+      if (!user) user = await prisma.user.create({ data: { phone_number: remoteJid, status: "INACTIVE" } });
+      await sendText(remoteJid,
+        `Olá! Sou o Nico, seu Assessor Financeiro. 🤖📈\n\nSua assinatura ainda não está ativa. Para liberar o acesso, garanta sua vaga:\n\n🎁 30 DIAS GRÁTIS — só paga após o primeiro mês.\n\n🔗 https://www.nicoassessor.com/\n\nAssim que concluir o cadastro, seu acesso é liberado aqui automaticamente!`,
+        instance || "main"
+      );
       return;
     }
 
-    // 2. Histórico e Contexto (Busca antes de salvar a nova para evitar duplicação no prompt)
-    const history = await prisma.message.findMany({ where: { user_id: user.id }, orderBy: { created_at: 'desc' }, take: 30 });
-    const memory  = history.reverse().map(m => ({ role: m.role, content: m.content }));
+    // 2. Histórico de conversa (últimas 20 mensagens, ordenadas corretamente)
+    const history = await prisma.message.findMany({
+      where: { user_id: user.id },
+      orderBy: { created_at: 'desc' },
+      take: 20
+    });
+    const memory = history.reverse().map(m => ({ role: m.role, content: m.content }));
 
-    // Agora salva a mensagem atual no banco para o próximo turno
+    // Salva mensagem atual ANTES de chamar a IA (para ficar no contexto da próxima)
     await prisma.message.create({ data: { user_id: user.id, role: "user", content: msgText } });
 
-    const pendingTasks = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, take: 15 });
-    const expenses     = await prisma.expense.findMany({ where: { user_id: user.id }, orderBy: { date: 'desc' }, take: 5 });
-    const incomes      = await prisma.income.findMany({ where: { user_id: user.id }, orderBy: { date: 'desc' }, take: 5 });
-
-    // Cálculo de Saldo Mensal (Mês Atual)
+    // 3. Contexto financeiro e de tarefas
     const firstDayMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthExpenses = await prisma.expense.aggregate({ where: { user_id: user.id, date: { gte: firstDayMonth } }, _sum: { amount: true } });
-    const monthIncomes  = await prisma.income.aggregate({ where: { user_id: user.id, date: { gte: firstDayMonth } }, _sum: { amount: true } });
-    
-    const totalExp = monthExpenses._sum.amount || 0;
-    const totalInc = monthIncomes._sum.amount || 0;
-    const balance  = totalInc - totalExp;
+    const [pendingTasks, recentExpenses, recentIncomes, monthExpAgg, monthIncAgg, msgCount] = await Promise.all([
+      prisma.task.findMany({ where: { user_id: user.id, completed: false }, orderBy: { due_date: 'asc' }, take: 15 }),
+      prisma.expense.findMany({ where: { user_id: user.id }, orderBy: { date: 'desc' }, take: 5 }),
+      prisma.income.findMany({ where: { user_id: user.id }, orderBy: { date: 'desc' }, take: 5 }),
+      prisma.expense.aggregate({ where: { user_id: user.id, date: { gte: firstDayMonth } }, _sum: { amount: true } }),
+      prisma.income.aggregate({ where: { user_id: user.id, date: { gte: firstDayMonth } }, _sum: { amount: true } }),
+      prisma.message.count({ where: { user_id: user.id } })
+    ]);
 
-    const myTasksStr = pendingTasks.length > 0 
-      ? pendingTasks.map(t => `- ${t.title}${t.due_date ? ` [DATA: ${t.due_date.toLocaleString("pt-BR", {timeZone: "America/Sao_Paulo"})}]` : " [SEM DATA]"}`).join("\n") 
-      : "Nenhuma pendente";
-
-    const fmtDate = (d) => new Date(d).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric" });
-
-    const myExpStr = expenses.length > 0 
-      ? expenses.map(e => `- R$${e.amount} em ${e.description} (${e.category}) [DATA: ${fmtDate(e.date)}]`).join("\n") 
-      : "Nenhum gasto recente";
-      
-    const myIncStr = incomes.length > 0 
-      ? incomes.map(i => `- R$${i.amount} em ${i.description} (${i.category}) [DATA: ${fmtDate(i.date)}]`).join("\n") 
-      : "Nenhuma receita recente";
-
-    const msgCount = await prisma.message.count({ where: { user_id: user.id } });
+    const totalExp = monthExpAgg._sum.amount || 0;
+    const totalInc = monthIncAgg._sum.amount || 0;
+    const balance = totalInc - totalExp;
     const isFirst = msgCount <= 1;
 
+    const fmtDate = (d) => new Date(d).toLocaleString("pt-BR", {
+      timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric"
+    });
+    const fmtDateTime = (d) => new Date(d).toLocaleString("pt-BR", {
+      timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit"
+    });
+
+    const tasksStr = pendingTasks.length
+      ? pendingTasks.map(t => `• "${t.title}" ${t.due_date ? `[${fmtDateTime(t.due_date)}]` : "[sem data]"}`).join("\n")
+      : "Nenhuma tarefa pendente";
+
+    const expensesStr = recentExpenses.length
+      ? recentExpenses.map(e => `• R$${e.amount.toFixed(2)} — ${e.description} (${e.category}) [${fmtDate(e.date)}]`).join("\n")
+      : "Nenhum gasto recente";
+
+    const incomesStr = recentIncomes.length
+      ? recentIncomes.map(i => `• R$${i.amount.toFixed(2)} — ${i.description} (${i.category}) [${fmtDate(i.date)}]`).join("\n")
+      : "Nenhuma receita recente";
+
     const dataAtual = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const userName = user.name && !["Nico User", "Investidor", "Investidor ", "Prezado"].includes(user.name) ? user.name : null;
 
-    console.log(`[AI Context] Iniciando processamento...`);
-    const sysPrompt = `### IDENTIDADE
-Você é o Assessor Nico, um consultor financeiro e assistente pessoal polido, educado e profissional. Para você, "Dívidas", "Contas" e "Gastos" são a mesma coisa. 
-Você simplifica a vida financeira do usuário, mas sempre com um tone de cordialidade e elegância, como um gerente de banco premium.
-NUNCA use gírias como "chefe", "mano", "bora", "show", nem exageros informais. Seja prestativo, claro e direto ao ponto. Use emojis com moderação apenas para organizar informações visualmente.
+    // ─── SYSTEM PROMPT CIRÚRGICO ────────────────────────────────────────────────
+    //
+    // PRINCÍPIO: Regras claras + exemplos few-shot = execução precisa.
+    // Menos regras, mais exemplos concretos.
+    //
+    const sysPrompt = `Você é o Assessor Nico — consultor financeiro e assistente pessoal via WhatsApp.
+Tom: profissional, cordial, sem gírias. Emojis apenas para estruturar informação. Sem asteriscos (*) ou underscores (_).
 
-### CONTEXTO ATUAL (VERDADE ABSOLUTA)
-- Data/Hora: ${dataAtual}
-- Status da Assinatura: ASSINANTE PRO (Acesso Liberado)
-- Primeira Interação: ${isFirst ? 'SIM — apresente-se completamente' : 'NÃO — seja direto e informal'}
-- Total de mensagens trocadas: ${msgCount}
-- Usuário: ${user.name && !["Nico User", "Investidor", "Investidor ", "Prezado"].includes(user.name) ? user.name : "NÃO INFORMADO"}
+=== DADOS DO USUÁRIO ===
+Data/Hora atual: ${dataAtual}
+Nome: ${userName || "não informado"}
+Primeira mensagem: ${isFirst ? "SIM — apresente-se brevemente" : "NÃO — seja direto"}
+Saldo mensal: R$ ${balance.toFixed(2)} (Receitas: R$ ${totalInc.toFixed(2)} | Gastos: R$ ${totalExp.toFixed(2)})
 
-### REGISTROS INTERNOS (PARA SEU CONHECIMENTO):
-- Financeiro (Este Mês): R$ ${balance.toFixed(2)} (Receitas: R$ ${totalInc.toFixed(2)} | Gastos/Dívidas: R$ ${totalExp.toFixed(2)})
-- Agenda de Tarefas: ${myTasksStr}
-- Histórico de Dívidas/Gastos: ${myExpStr}
-- Histórico de Receitas: ${myIncStr}
+Tarefas pendentes:
+${tasksStr}
 
-### REGRAS DE COMPORTAMENTO (ESTRITAS):
-1. **AÇÃO E CONVERSA**: Se o usuário mandar um comando (Gastar, Lembrar), foque em registrar. Se ele apenas conversar (ex: "oi", "tudo bem"), responda de forma amigável no campo 'reply'.
-2. **SAUDAÇÃO INTELIGENTE**: ${isFirst ? 'Esta é a PRIMEIRA mensagem deste usuário. Apresente-se completamente como Assessor Nico.' : 'NÃO é a primeira mensagem (total: ' + msgCount + '). Seja breve e natural. NUNCA repita sua bio completa.'}
-3. **ZERO ALUCINAÇÃO**: Se o usuário perguntar por algo, olhe APENAS os "REGISTROS INTERNOS". Se não estiver lá, diga "Não encontrei esse registro".
-4. **MODELO DE CONFIRMAÇÃO OBRIGATÓRIO**: Para CADA ação de registro (TASK, EXPENSE, INCOME) que você identificar, você DEVE gerar o bloco estruturado abaixo no campo 'reply'. Se houver 3 gastos, você deve gerar 3 blocos no mesmo 'reply'.
-✅ [Gasto/Entrada/Tarefa] registrado!
+Últimos gastos:
+${expensesStr}
 
-📝 [Descrição/Título]: [texto exato do usuário, ex: "mercado"]
-💰 Valor: R$ [valor] (apenas se for financeiro)
-📅 Data: [Apenas "DD-MM-AAAA" se for dia inteiro, ou "DD-MM-AAAA às HH:mm" se tiver hora]
-🏷️ [Categoria/Alarme]: [categoria do gasto ou Status do Lembrete]
+Últimas receitas:
+${incomesStr}
 
-5. **EMOJIS**: Use emojis de forma moderada e estratégica para dar vida à conversa. Máximo 1 por parágrafo.
-6. **INSTRUÇÃO PROATIVA**: Para comandos vagos, dê um exemplo útil.
-7. **CATEGORIZAÇÃO**: Atribua sempre uma categoria lógica aos gastos (EXPENSE).
-8. **MÚLTIPLOS PEDIDOS**: Gere uma "action" separada para cada um deles.
-9. **SEM REPETIÇÃO**: Se for apenas uma confirmação curta como "Ok", responda apenas com texto.
-10. **COMANDO DELETE**: Se o usuário pedir para "apagar", "remover", "excluir" ou "cancelar" um registro específico (ex: "apague o gasto do uber"), use a ação DELETE. Se ele usar referências ordinais (ex: "apague o primeiro", "remova o último"), identifique pelo histórico qual registro ele se refere e use o nome/descrição real dele no 'target'. Se ele quiser "limpar tudo" ou "resetar", use { "type": "ALL" }.
-11. **CONCLUIR TAREFA (DONE)**: Se o usuário disser "concluí", "concluir", "finalizar", "finalizado", "feito", "já fiz", "finalizei", "terminei", use obrigatoriamente a ação DONE. Referências como "concluir o primeiro" também devem ser resolvidas para o título real da tarefa.
-12. **AGENDAMENTO**: Se houver intenção de lembrete (ex: "me lembre", "anote aí", "marcar reunião"), use TASK com "remind: true".
-13. **INTELIGÊNCIA DE CONTEXTO**: Você entende erros de digitação. Se o usuário disser "digitei errado", "errei o valor", seja proativo: sugira que ele peça para apagar o registro e se coloque à disposição para refazer.
-14. **SEM ASTERISCOS**: NUNCA utilize o caractere asterisco (*) para negrito, itálico ou qualquer tipo de formatação. Escreva o texto totalmente limpo, sem o caractere *.
-15. **PROIBIDO LISTAR MANUALMENTE**: NUNCA escreva listas de gastos, agenda ou extratos manualmente no campo 'reply'. Se o usuário pedir para listar, você DEVE usar a ação QUERY e escrever apenas uma frase curta e amigável no 'reply' (ex: "Claro, estou buscando aqui seus registros..."). Deixe que o sistema gere a lista para você.
-16. **PERSONALIDADE NATURAL**: Seja cordial como um gerente premium. Se você souber o nome real do usuário, use-o com moderação. Se houver erro ou frustração dele, seja empático e ofereça ajuda imediata para corrigir.
-17. **CONVERSA LIVRE E OBRIGATÓRIA**: Você é um assessor com personalidade! O campo 'reply' NUNCA deve ficar vazio. Se o usuário fizer uma pergunta casual ("quem eu sou?", "tudo bem?"), responda de forma natural e proativa usando o nome dele (que está no Contexto Atual).
-18. **INTELIGÊNCIA DE INTENÇÃO**: Frases como "o que vou fazer hoje?", "meus compromissos", "minha agenda" ou "quais minhas tarefas?" significam que o usuário quer ver a agenda. Você DEVE gerar a ação QUERY com type "TASKS" e escrever no 'reply' algo como "Deixa comigo, fui buscar sua agenda:"
-
-
-### FORMATO DE SAÍDA (OBRIGATÓRIO JSON):
-Você DEVE retornar um JSON válido. Se não houver ações a fazer (ex: usuário disse apenas "oi"), retorne a lista de actions VAZIA [], mas PREENCHA o reply.
+=== SEU ÚNICO FORMATO DE RESPOSTA ===
+Retorne APENAS um JSON válido, sem texto fora dele, sem blocos de código. Estrutura:
 
 {
-  "actions": [
-    { "action": "TASK", "parsedData": { "title": "string", "due_date": "ISO-DATE ou null", "remind": boolean } },
-    { "action": "EXPENSE", "parsedData": { "amount": float, "description": "string", "category": "string", "date": "ISO-DATE | null" } },
-    { "action": "INCOME", "parsedData": { "amount": float, "description": "string", "category": "string", "date": "ISO-DATE | null" } },
-    { "action": "QUERY", "parsedData": { "type": "TASKS | EXPENSES | INCOMES | SUMMARY" } },
-    { "action": "DELETE", "parsedData": { "type": "ALL | EXPENSES | TASKS | INCOMES", "target": "string (opcional)" } },
-    { "action": "DONE", "parsedData": { "title": "string" } },
-    { "action": "SUBSCRIBE", "parsedData": {} },
-    { "action": "TOGGLE_ALARM", "parsedData": { "target": "string ou 'todos'", "active": boolean } }
-  ],
-  "reply": "Sua resposta natural, humana e com emojis aqui. OBRIGATÓRIO preencher se for um bate-papo ou pergunta."
+  "actions": [...],
+  "reply": "mensagem para o usuário"
 }
-Nota: Se o usuário pedir para você 'Parar de mandar mensagem', responda que entendeu e NÃO inclua ações.`;
 
+=== TIPOS DE AÇÃO ===
+
+1. REGISTRAR GASTO/DÍVIDA/CONTA → action "EXPENSE"
+   Gatilhos: "gastei", "paguei", "comprei", "saiu", "dívida", "conta de"
+   Exemplo input: "gastei 45 no uber"
+   → { "action": "EXPENSE", "parsedData": { "amount": 45.00, "description": "Uber", "category": "Transporte", "date": null } }
+
+2. REGISTRAR RECEITA/ENTRADA → action "INCOME"
+   Gatilhos: "recebi", "entrou", "salário", "vendi", "renda"
+   Exemplo input: "recebi 3000 de salário"
+   → { "action": "INCOME", "parsedData": { "amount": 3000.00, "description": "Salário", "category": "Salário", "date": null } }
+
+3. CRIAR TAREFA/LEMBRETE → action "TASK"
+   Gatilhos: "lembrar", "me avise", "agendar", "reunião", "compromisso", "não esquecer"
+   Para lembrete com horário: "remind": true. Sem horário: "remind": false.
+   Exemplo input: "me lembra de pagar o aluguel amanhã às 9h"
+   → { "action": "TASK", "parsedData": { "title": "Pagar aluguel", "due_date": "2025-01-15T09:00:00", "remind": true } }
+
+4. CONSULTAR DADOS → action "QUERY"
+   Gatilhos: "mostrar", "listar", "ver", "quais são", "quanto gastei", "extrato", "relatório", "meus gastos", "minha agenda", "resumo", "saldo", "tarefas", "compromissos"
+   IMPORTANTE: Você DEVE usar QUERY para qualquer pedido de visualização. Nunca escreva listas no campo "reply".
+   Tipos disponíveis: "TASKS", "EXPENSES", "INCOMES", "SUMMARY"
+   
+   Exemplo input: "quanto gastei esse mês"
+   → { "action": "QUERY", "parsedData": { "type": "EXPENSES", "date": null } }
+   
+   Exemplo input: "minha agenda"
+   → { "action": "QUERY", "parsedData": { "type": "TASKS", "date": null } }
+   
+   Exemplo input: "meu resumo / saldo"
+   → { "action": "QUERY", "parsedData": { "type": "SUMMARY", "date": null } }
+   
+   Exemplo input: "minhas receitas de março"
+   → { "action": "QUERY", "parsedData": { "type": "INCOMES", "date": "2025-03" } }
+
+5. CONCLUIR TAREFA → action "DONE"
+   Gatilhos: "concluí", "terminei", "feito", "finalizado", "já fiz", "marcar como feito"
+   Exemplo input: "concluí a reunião"
+   → { "action": "DONE", "parsedData": { "title": "reunião" } }
+
+6. APAGAR REGISTRO → action "DELETE"
+   Gatilhos: "apagar", "remover", "excluir", "deletar", "cancelar"
+   Para resetar tudo: type "ALL"
+   Exemplo input: "apaga o gasto do uber"
+   → { "action": "DELETE", "parsedData": { "type": "EXPENSES", "target": "uber" } }
+   Exemplo input: "apaga a tarefa de academia"
+   → { "action": "DELETE", "parsedData": { "type": "TASKS", "target": "academia" } }
+
+7. SILENCIAR ALARME → action "TOGGLE_ALARM"
+   Gatilhos: "desligar alarme", "silenciar lembrete", "parar de me avisar"
+   Exemplo: { "action": "TOGGLE_ALARM", "parsedData": { "target": "todos", "active": false } }
+
+=== REGRAS CRÍTICAS ===
+
+R1. MÚLTIPLOS PEDIDOS: Se o usuário mandar vários pedidos numa mensagem, gere uma action para cada um.
+    Exemplo: "gastei 20 na farmácia e 50 no mercado" → duas actions EXPENSE.
+
+R2. REPLY OBRIGATÓRIO: O campo "reply" nunca fica vazio. Se só registrou, confirme brevemente.
+    Formato de confirmação:
+    "✅ [Tipo] registrado!
+    📝 [Descrição]
+    💰 Valor: R$ X,XX (se financeiro)
+    📅 Data: DD/MM/AAAA
+    🏷️ Categoria: [categoria]"
+
+R3. CONSULTAS: Para qualquer pedido de "ver", "listar", "mostrar" ou "extrato", use SEMPRE a action QUERY.
+    No campo "reply", escreva apenas uma frase curta (ex: "Aqui estão seus registros:").
+    NUNCA reproduza listas ou valores no "reply" quando usar QUERY — o sistema já faz isso.
+
+R4. SEM ALUCINAÇÃO: Use apenas os dados em "DADOS DO USUÁRIO". Se não estiver lá, diga que não encontrou.
+
+R5. INTENÇÃO VAGA: Se o pedido for impreciso, execute o que conseguir e peça confirmação.
+
+R6. DATAS RELATIVAS: Resolva baseado na data atual (${dataAtual}).
+    "hoje" → data de hoje, "amanhã" → data de amanhã, "semana que vem" → próxima segunda.
+
+R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "actions": [] e responda no "reply".`;
+
+    // ─── Chamada IA ────────────────────────────────────────────────────────────
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const timeoutId = setTimeout(() => controller.abort(), 28000);
 
-    // 4. Chamada IA Principal (Única e Absoluta)
-    const upstream = await fetch("https://api.deepseek.com/v1/chat/completions", {
-      method:  "POST",
-      headers: { "Content-Type":  "application/json", "Authorization": `Bearer ${DEEPSEEK_API_KEY}` },
-      body: JSON.stringify({
-        model: "deepseek-chat",
-        messages: [{ role: "system", "content": sysPrompt }, ...memory, { role: "user", "content": msgText }],
-        temperature: 0.1,
-        response_format: { type: "json_object" } 
-      }),
-      signal: controller.signal
-    }).finally(() => clearTimeout(timeoutId));
-    
     let aiResponse = { actions: [], reply: "" };
 
-    if (!upstream.ok) {
-      console.error(`[${remoteJid}] ❌ Erro Upstream DeepSeek: ${upstream.status}`);
-      aiResponse.reply = "Tive um soluço técnico ao falar com meu cérebro. Pode tentar de novo? 🧠💫";
-    } else {
-      const dsData = await upstream.json();
-      let rawContent = dsData.choices?.[0]?.message?.content || "";
-      console.log(`[DEBUG IA - ${remoteJid}] Resposta CRUA da DeepSeek:`, rawContent);
-      
-      try {
-        const s = rawContent.indexOf('{');
-        const e = rawContent.lastIndexOf('}');
-        
-        if (s !== -1 && e !== -1) {
-          const jsonString = rawContent.substring(s, e + 1);
-          aiResponse = JSON.parse(jsonString);
-        } else {
-          aiResponse.reply = rawContent.trim();
+    try {
+      const upstream = await fetch("https://api.deepseek.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${DEEPSEEK_API_KEY}` },
+        body: JSON.stringify({
+          model: "deepseek-chat",
+          messages: [{ role: "system", content: sysPrompt }, ...memory, { role: "user", content: msgText }],
+          temperature: 0.05,
+          max_tokens: 2048,
+          response_format: { type: "json_object" }
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!upstream.ok) {
+        const errText = await upstream.text();
+        console.error(`[${remoteJid}] ❌ DeepSeek HTTP ${upstream.status}:`, errText);
+        aiResponse.reply = "Tive um problema técnico momentâneo. Pode tentar novamente? 🧠";
+      } else {
+        const dsData = await upstream.json();
+        const rawContent = dsData.choices?.[0]?.message?.content || "";
+        console.log(`[AI RAW - ${remoteJid}]`, rawContent.substring(0, 500));
+
+        try {
+          // Extrai JSON mesmo se vier com texto ao redor (failsafe)
+          const s = rawContent.indexOf('{');
+          const e = rawContent.lastIndexOf('}');
+          if (s !== -1 && e !== -1) {
+            aiResponse = JSON.parse(rawContent.substring(s, e + 1));
+          } else {
+            aiResponse.reply = rawContent.trim();
+          }
+        } catch (parseErr) {
+          console.error(`[${remoteJid}] ❌ JSON parse falhou:`, parseErr.message, "| Raw:", rawContent.substring(0, 200));
+          // Tenta usar o texto cru como reply em vez de travar
+          aiResponse.reply = rawContent.replace(/[*_`#]/g, '').trim() || "Não consegui processar corretamente. Pode repetir de outra forma?";
         }
-      } catch(e) { 
-        console.error(`[${remoteJid}] ❌ Erro Parse JSON AI:`, e.message);
-        aiResponse.reply = "Deu um curto-circuito interno ao processar isso. Pode repetir?";
       }
+    } catch (fetchErr) {
+      clearTimeout(timeoutId);
+      console.error(`[${remoteJid}] ❌ Fetch DeepSeek:`, fetchErr.message);
+      aiResponse.reply = "Estou com instabilidade na conexão. Tente novamente em instantes.";
     }
 
-    // 5. Execução de Ações
+    // ─── Execução de Ações ─────────────────────────────────────────────────────
+
+    // Garante que actions é sempre um array válido
+    if (!Array.isArray(aiResponse.actions)) aiResponse.actions = [];
+
+    // Deduplicação de ações idênticas
+    const seenKeys = new Set();
+    const uniqueActs = aiResponse.actions.filter(act => {
+      if (!act?.action) return false;
+      const d = JSON.parse(JSON.stringify(act.parsedData || {}));
+      if (d.description) d.description = d.description.toLowerCase().trim();
+      if (d.title) d.title = d.title.toLowerCase().trim();
+      const key = `${act.action}::${JSON.stringify(d)}`;
+      if (seenKeys.has(key)) return false;
+      seenKeys.add(key);
+      return true;
+    });
+
     let hasChange = false;
-    const aiActions = aiResponse.actions || [];
-    
-    // Deduplicação
-    const uniqueActions = [];
-    const seenActions = new Set();
-    for (const act of aiActions) {
-      const cleanData = JSON.parse(JSON.stringify(act.parsedData || {}));
-      if (cleanData.description) cleanData.description = cleanData.description.toLowerCase().trim();
-      if (cleanData.title) cleanData.title = cleanData.title.toLowerCase().trim();
-      
-      const key = `${act.action}-${JSON.stringify(cleanData)}`;
-      if (!seenActions.has(key)) {
-        uniqueActions.push(act);
-        seenActions.add(key);
-      }
-    }
 
-    for (const act of uniqueActions) {
-      const { action, parsedData } = act;
+    for (const act of uniqueActs) {
+      const { action, parsedData = {} } = act;
+      console.log(`[${remoteJid}] ▶ Executando action: ${action}`, JSON.stringify(parsedData));
+
       try {
-        if (action === "EXPENSE" && parsedData.amount) {
-          const val = parseFloat(String(parsedData.amount).replace(',', '.').replace(/[^\d.]/g, ''));
+        // ── EXPENSE ──────────────────────────────────────────────────────────
+        if (action === "EXPENSE") {
+          const val = parseFloat(String(parsedData.amount || 0).replace(',', '.').replace(/[^\d.]/g, ''));
           if (val > 0) {
-            await prisma.expense.create({ 
-              data: { 
-                user_id: user.id, 
-                amount: val, 
+            await prisma.expense.create({
+              data: {
+                user_id: user.id,
+                amount: val,
                 description: parsedData.description || "Gasto",
                 category: parsedData.category || "Outros",
                 date: parsedData.date ? new Date(String(parsedData.date).replace(/Z$/i, "")) : new Date()
-              } 
+              }
+            });
+            hasChange = true;
+          } else {
+            console.warn(`[${remoteJid}] ⚠️ EXPENSE ignorado: valor inválido (${parsedData.amount})`);
+          }
+        }
+
+        // ── INCOME ───────────────────────────────────────────────────────────
+        else if (action === "INCOME") {
+          const val = parseFloat(String(parsedData.amount || 0).replace(',', '.').replace(/[^\d.]/g, ''));
+          if (val > 0) {
+            await prisma.income.create({
+              data: {
+                user_id: user.id,
+                amount: val,
+                description: parsedData.description || "Receita",
+                category: parsedData.category || "Renda",
+                date: parsedData.date ? new Date(String(parsedData.date).replace(/Z$/i, "")) : new Date()
+              }
             });
             hasChange = true;
           }
-        } 
-        else if (action === "TASK" && parsedData.title) {
-          const title = cleanTitle(parsedData.title);
-          const existing = await prisma.task.findFirst({ where: { user_id: user.id, completed: false, title: { contains: title, mode: 'insensitive' } } });
-          const finalDueDate = parsedData.due_date ? new Date(String(parsedData.due_date).replace(/Z$/i, "")) : null;
-          const notifiedFlag = (parsedData.remind === true) ? false : true; 
-          
+        }
+
+        // ── TASK ─────────────────────────────────────────────────────────────
+        else if (action === "TASK") {
+          const title = cleanTitle(parsedData.title || "");
+          if (!title) { console.warn(`[${remoteJid}] ⚠️ TASK ignorada: título vazio`); continue; }
+
+          const dueDate = parsedData.due_date ? new Date(String(parsedData.due_date).replace(/Z$/i, "")) : null;
+          const shouldRemind = parsedData.remind === true && dueDate !== null;
+          const notifiedFlag = !shouldRemind; // false = alarme ativo
+
+          const existing = await prisma.task.findFirst({
+            where: { user_id: user.id, completed: false, title: { contains: title, mode: 'insensitive' } }
+          });
+
           if (existing) {
-            await prisma.task.update({ 
-              where: { id: existing.id }, 
-              data: { due_date: finalDueDate || existing.due_date, notified: notifiedFlag, notified_5min: notifiedFlag } 
+            await prisma.task.update({
+              where: { id: existing.id },
+              data: { due_date: dueDate || existing.due_date, notified: notifiedFlag, notified_5min: notifiedFlag }
             });
+            console.log(`[${remoteJid}] 🔄 Tarefa atualizada: "${title}"`);
           } else {
-            await prisma.task.create({ 
-              data: { user_id: user.id, title: title, due_date: finalDueDate, notified: notifiedFlag, notified_5min: notifiedFlag } 
+            await prisma.task.create({
+              data: { user_id: user.id, title, due_date: dueDate, notified: notifiedFlag, notified_5min: notifiedFlag }
             });
+            console.log(`[${remoteJid}] ✅ Tarefa criada: "${title}"`);
           }
           hasChange = true;
-        } 
+        }
+
+        // ── QUERY ─────────────────────────────────────────────────────────────
         else if (action === "QUERY") {
-          const queryType = parsedData.type || "SUMMARY"; 
-          let activeFilter = { gte: firstDayMonth };
-          
+          const queryType = (parsedData.type || "SUMMARY").toUpperCase();
+
+          // Resolução de período
+          let dateFilter = { gte: firstDayMonth };
           if (parsedData.date) {
             const rawDate = String(parsedData.date);
             const monthMatch = rawDate.match(/^(\d{4})-(\d{2})$/);
             if (monthMatch) {
-              const year = parseInt(monthMatch[1]);
-              const month = parseInt(monthMatch[2]) - 1;
-              activeFilter = { 
-                gte: new Date(year, month, 1, 0, 0, 0), 
-                lte: new Date(year, month + 1, 0, 23, 59, 59) 
-              };
+              const yr = parseInt(monthMatch[1]);
+              const mo = parseInt(monthMatch[2]) - 1;
+              dateFilter = { gte: new Date(yr, mo, 1), lte: new Date(yr, mo + 1, 0, 23, 59, 59) };
             } else {
               const d = new Date(rawDate);
               if (!isNaN(d.getTime())) {
-                activeFilter = { 
-                  gte: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0), 
-                  lte: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59) 
+                dateFilter = {
+                  gte: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0),
+                  lte: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59)
                 };
               }
             }
           }
-          let queryResultText = ""; 
+
+          let queryResult = "";
 
           if (queryType === "TASKS") {
-            const list = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, orderBy: { due_date: 'asc' } });
-            queryResultText = list.length > 0 ? `📅 SUA AGENDA ATUALIZADA\n━━━━━━━━━━━━━━━━━━\n\n` + list.map(t => {
-                if (!t.due_date) return `🔔 ${t.title}`;
-                const d = new Date(t.due_date);
-                const dStr = d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
-                return `🔔 ${t.title}\n   └─ ⏰ ${dStr}\n`;
-            }).join("\n") + "\n━━━━━━━━━━━━━━━━━━" : "Sua lista de tarefas está zerada para hoje! 🎉";
-          } 
-          else if (queryType === "EXPENSES") {
-            const exps = await prisma.expense.findMany({ where: { user_id: user.id, date: activeFilter }, orderBy: { date: 'desc' } });
-            queryResultText = formatFinanceRecords(exps, "EXPENSE");
-          } 
-          else if (queryType === "INCOMES") {
-            const incs = await prisma.income.findMany({ where: { user_id: user.id, date: activeFilter }, orderBy: { date: 'desc' } });
-            queryResultText = formatFinanceRecords(incs, "INCOME");
-          } 
-          else {
-            const tasks = await prisma.task.findMany({ where: { user_id: user.id, completed: false }, take: 5 });
-            const eSum = await prisma.expense.aggregate({ where: { user_id: user.id, date: activeFilter }, _sum: { amount: true } });
-            const iSum = await prisma.income.aggregate({ where: { user_id: user.id, date: activeFilter }, _sum: { amount: true } });
-            queryResultText = `✨ Seu Resumo Geral ✨\n\n💰 Receitas: R$ ${(iSum._sum.amount || 0).toFixed(2)}\n💸 Gastos: R$ ${(eSum._sum.amount || 0).toFixed(2)}\n📋 Tarefas pendentes: ${tasks.length}`;
+            const list = await prisma.task.findMany({
+              where: { user_id: user.id, completed: false },
+              orderBy: { due_date: 'asc' }
+            });
+            if (list.length > 0) {
+              queryResult = `📅 SUA AGENDA\n━━━━━━━━━━━━━━━━━━\n\n`;
+              queryResult += list.map(t => {
+                if (!t.due_date) return `🔔 ${t.title}\n   └─ Sem data definida`;
+                const dStr = new Date(t.due_date).toLocaleString("pt-BR", {
+                  timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit",
+                  hour: "2-digit", minute: "2-digit"
+                });
+                return `🔔 ${t.title}\n   └─ ⏰ ${dStr}`;
+              }).join("\n\n");
+              queryResult += `\n\n━━━━━━━━━━━━━━━━━━\nTotal: ${list.length} tarefa(s) pendente(s)`;
+            } else {
+              queryResult = "Sua agenda está limpa! Nenhuma tarefa pendente. 🎉";
+            }
+
+          } else if (queryType === "EXPENSES") {
+            const exps = await prisma.expense.findMany({
+              where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' }
+            });
+            queryResult = formatFinanceRecords(exps, "EXPENSE");
+
+          } else if (queryType === "INCOMES") {
+            const incs = await prisma.income.findMany({
+              where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' }
+            });
+            queryResult = formatFinanceRecords(incs, "INCOME");
+
+          } else { // SUMMARY
+            const [tasks, eAgg, iAgg] = await Promise.all([
+              prisma.task.findMany({ where: { user_id: user.id, completed: false }, take: 5 }),
+              prisma.expense.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } }),
+              prisma.income.aggregate({ where: { user_id: user.id, date: dateFilter }, _sum: { amount: true } })
+            ]);
+            const inc = iAgg._sum.amount || 0;
+            const exp = eAgg._sum.amount || 0;
+            const bal = inc - exp;
+            const balEmoji = bal >= 0 ? "✅" : "⚠️";
+            queryResult = `✨ RESUMO MENSAL\n━━━━━━━━━━━━━━━━━━\n\n`;
+            queryResult += `📈 Receitas:  R$ ${inc.toFixed(2)}\n`;
+            queryResult += `📉 Gastos:    R$ ${exp.toFixed(2)}\n`;
+            queryResult += `━━━━━━━━━━━━━━━━━━\n`;
+            queryResult += `${balEmoji} Saldo:     R$ ${bal.toFixed(2)}\n\n`;
+            queryResult += `📋 Tarefas pendentes: ${tasks.length}`;
           }
 
-          // A MÁGICA ACONTECE AQUI: Junta a fala natural da IA com os dados puxados do banco!
-          aiResponse.reply = (aiResponse.reply ? aiResponse.reply + "\n\n" : "") + queryResultText;
+          // Junta a fala da IA com os dados reais
+          aiResponse.reply = (aiResponse.reply ? aiResponse.reply.trim() + "\n\n" : "") + queryResult;
+          console.log(`[${remoteJid}] 📊 QUERY ${queryType} executada com sucesso.`);
         }
+
+        // ── DONE ─────────────────────────────────────────────────────────────
+        else if (action === "DONE") {
+          const taskName = (parsedData.title || "").toLowerCase();
+          if (!taskName) { console.warn(`[${remoteJid}] ⚠️ DONE ignorado: título vazio`); continue; }
+
+          const task = await prisma.task.findFirst({
+            where: { user_id: user.id, completed: false, title: { contains: taskName, mode: 'insensitive' } },
+            orderBy: { created_at: 'desc' }
+          });
+
+          if (task) {
+            await prisma.task.update({ where: { id: task.id }, data: { completed: true } });
+            aiResponse.reply = (aiResponse.reply ? aiResponse.reply + "\n\n" : "") +
+              `✅ Tarefa concluída!\n\n📝 "${task.title}"\n🏆 Status: Finalizada`;
+            hasChange = true;
+          } else {
+            console.log(`[${remoteJid}] ⚠️ Tarefa para DONE não encontrada: "${taskName}"`);
+            aiResponse.reply = (aiResponse.reply ? aiResponse.reply + "\n\n" : "") +
+              `Não encontrei nenhuma tarefa pendente com esse nome. Deseja ver sua agenda completa?`;
+          }
+        }
+
+        // ── DELETE ───────────────────────────────────────────────────────────
+        else if (action === "DELETE") {
+          const delType = (parsedData.type || "ALL").toUpperCase();
+          const target = (parsedData.target || "").toLowerCase().trim();
+          const rawLower = msgText.toLowerCase();
+
+          if (delType === "ALL" || rawLower.includes("tudo") || rawLower.includes("reset")) {
+            await Promise.all([
+              prisma.task.deleteMany({ where: { user_id: user.id } }),
+              prisma.expense.deleteMany({ where: { user_id: user.id } }),
+              prisma.income.deleteMany({ where: { user_id: user.id } })
+            ]);
+            aiResponse.reply = "🗑️ Reset completo! Todos os seus registros foram removidos.";
+            hasChange = true;
+
+          } else if (delType === "EXPENSES" || delType === "INCOMES") {
+            const model = delType === "EXPENSES" ? prisma.expense : prisma.income;
+            const label = delType === "EXPENSES" ? "Gasto" : "Receita";
+
+            if (target) {
+              const record = await model.findFirst({
+                where: { user_id: user.id, description: { contains: target, mode: 'insensitive' } },
+                orderBy: { date: 'desc' }
+              });
+              if (record) {
+                await model.delete({ where: { id: record.id } });
+                aiResponse.reply = (aiResponse.reply ? aiResponse.reply + "\n\n" : "") +
+                  `🗑️ ${label} removido!\n📝 ${record.description} — R$ ${record.amount.toFixed(2)}`;
+                hasChange = true;
+              } else {
+                aiResponse.reply = (aiResponse.reply ? aiResponse.reply + "\n\n" : "") +
+                  `Não encontrei nenhum registro de ${label.toLowerCase()} com o nome "${target}".`;
+              }
+            } else {
+              await model.deleteMany({ where: { user_id: user.id } });
+              aiResponse.reply = `🗑️ Todos os registros de ${label.toLowerCase()} foram removidos.`;
+              hasChange = true;
+            }
+
+          } else if (delType === "TASKS") {
+            if (target) {
+              const task = await prisma.task.findFirst({
+                where: { user_id: user.id, title: { contains: target, mode: 'insensitive' } },
+                orderBy: { created_at: 'desc' }
+              });
+              if (task) {
+                await prisma.task.delete({ where: { id: task.id } });
+                aiResponse.reply = (aiResponse.reply ? aiResponse.reply + "\n\n" : "") +
+                  `🗑️ Tarefa removida!\n📝 "${task.title}"`;
+                hasChange = true;
+              } else {
+                aiResponse.reply = (aiResponse.reply ? aiResponse.reply + "\n\n" : "") +
+                  `Não encontrei nenhuma tarefa com o nome "${target}".`;
+              }
+            } else {
+              await prisma.task.deleteMany({ where: { user_id: user.id } });
+              aiResponse.reply = "🗑️ Todas as suas tarefas foram removidas.";
+              hasChange = true;
+            }
+          }
+        }
+
+        // ── TOGGLE_ALARM ─────────────────────────────────────────────────────
         else if (action === "TOGGLE_ALARM") {
           const target = (parsedData.target || "").toLowerCase();
           const turnOff = parsedData.active === false;
-          // Se turnOff for true, marcamos notified como true para o sistema "achar" que já tocou e não avisar mais.
-          const flagStatus = turnOff ? true : false; 
+          const flagStatus = turnOff; // true = "já notificado" = alarme silenciado
 
-          if (target === "todos" || target === "tudo") {
-            await prisma.task.updateMany({ 
-              where: { user_id: user.id, completed: false }, 
-              data: { notified: flagStatus, notified_5min: flagStatus } 
+          if (target === "todos" || target === "tudo" || !target) {
+            await prisma.task.updateMany({
+              where: { user_id: user.id, completed: false },
+              data: { notified: flagStatus, notified_5min: flagStatus }
             });
-            console.log(`[${remoteJid}] 🔇 Todos os alarmes desativados.`);
           } else {
-            // Tenta achar a tarefa específica
-            const existing = await prisma.task.findFirst({ 
-              where: { user_id: user.id, completed: false, title: { contains: target, mode: 'insensitive' } } 
+            const task = await prisma.task.findFirst({
+              where: { user_id: user.id, completed: false, title: { contains: target, mode: 'insensitive' } }
             });
-            if (existing) {
-              await prisma.task.update({ 
-                where: { id: existing.id }, 
-                data: { notified: flagStatus, notified_5min: flagStatus } 
+            if (task) {
+              await prisma.task.update({
+                where: { id: task.id },
+                data: { notified: flagStatus, notified_5min: flagStatus }
               });
-              console.log(`[${remoteJid}] 🔇 Alarme desativado para: ${existing.title}`);
             }
           }
           hasChange = true;
         }
-        else if (action === "DELETE") {
-           const type = parsedData.type || "ALL";
-           const target = (parsedData.target || "").toLowerCase();
-           const raw = msgText.toLowerCase();
 
-           if (type === "ALL" || raw.includes("tudo") || raw.includes("reset") || raw.includes("apagar histórico")) {
-              await prisma.task.deleteMany({ where: { user_id: user.id } });
-              await prisma.expense.deleteMany({ where: { user_id: user.id } });
-              await prisma.income.deleteMany({ where: { user_id: user.id } });
-              aiResponse.reply = "🗑️ RESET COMPLETO! Removi absolutamente todos os seus registros.";
-              hasChange = true;
-           } 
-           else if (type === "EXPENSES" || type === "INCOMES") {
-              const model = type === "EXPENSES" ? prisma.expense : prisma.income;
-              const emoji = type === "EXPENSES" ? "💸" : "💰";
-              const label = type === "EXPENSES" ? "Gasto" : "Receita";
-
-              if (target) {
-                const record = await model.findFirst({ 
-                   where: { user_id: user.id, description: { contains: target, mode: 'insensitive' } },
-                   orderBy: { date: 'desc' }
-                });
-                if (record) {
-                   await model.delete({ where: { id: record.id } });
-                   aiResponse.reply = (aiResponse.reply ? aiResponse.reply + "\n\n" : "") + 
-                     `🗑️ ${label} removido!\n\n📝 Descrição: ${record.description}\n💰 Valor: R$ ${record.amount.toFixed(2)}`;
-                   hasChange = true;
-                }
-              } else if (raw.includes("limpar") || raw.includes("todos")) {
-                await model.deleteMany({ where: { user_id: user.id } });
-                aiResponse.reply = `🗑️ FINANCEIRO (${label}) LIMPO! Todos os seus registros de ${label.toLowerCase()}s foram removidos.`;
-                hasChange = true;
-              }
-           }
-           else if (type === "TASKS") {
-              if (target) {
-                const task = await prisma.task.findFirst({ 
-                   where: { user_id: user.id, title: { contains: target, mode: 'insensitive' } },
-                   orderBy: { created_at: 'desc' }
-                });
-                if (task) {
-                   await prisma.task.delete({ where: { id: task.id } });
-                   aiResponse.reply = (aiResponse.reply ? aiResponse.reply + "\n\n" : "") + 
-                     `🗑️ Tarefa excluída!\n\n📝 Título: ${task.title}`;
-                   hasChange = true;
-                }
-              } else if (raw.includes("limpar todas") || raw.includes("deletar tudo") || raw.includes("excluir agenda")) {
-                await prisma.task.deleteMany({ where: { user_id: user.id } });
-                aiResponse.reply = "🗑️ TAREFAS LIMPAS! Sua agenda foi zerada.";
-                hasChange = true;
-              }
-           }
-        }
-        else if (action === "DONE") {
-          const taskName = parsedData.title || "";
-          const task = await prisma.task.findFirst({ 
-            where: { user_id: user.id, completed: false, title: { contains: taskName, mode: 'insensitive' } },
-            orderBy: { created_at: 'desc' }
-          });
-          
-          if (task) {
-            await prisma.task.update({ where: { id: task.id }, data: { completed: true } });
-            aiResponse.reply = (aiResponse.reply ? aiResponse.reply + "\n\n" : "") + 
-              `✅ Tarefa finalizada!\n\n📝 Título: ${task.title}\n🏆 Status: Concluída`;
+        // ── SUBSCRIBE ────────────────────────────────────────────────────────
+        else if (action === "SUBSCRIBE") {
+          try {
+            const session = await stripe.checkout.sessions.create({
+              payment_method_types: ['card'],
+              line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
+              mode: 'subscription',
+              client_reference_id: remoteJid,
+              phone_number_collection: { enabled: true },
+              success_url: `${APP_URL}/success.html`,
+              cancel_url: `${APP_URL}/cancel.html`,
+            });
+            aiResponse.reply += `\n\n🔗 Ative sua assinatura aqui: ${session.url}`;
             hasChange = true;
-          } else {
-            console.log(`[${remoteJid}] ⚠️ Nenhuma tarefa encontrada para concluir: ${taskName}`);
+          } catch (stripeErr) {
+            console.error(`[${remoteJid}] ❌ Stripe:`, stripeErr.message);
           }
         }
-        else if (action === "SUBSCRIBE") {
-          const session = await stripe.checkout.sessions.create({
-            payment_method_types: ['card'],
-            line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
-            mode: 'subscription',
-            client_reference_id: remoteJid,
-            phone_number_collection: { enabled: true },
-            success_url: `${APP_URL}/success.html`,
-            cancel_url: `${APP_URL}/cancel.html`,
-          });
-          aiResponse.reply += `\n\n🔗 *Ative sua assinatura aqui:* ${session.url}`;
-          hasChange = true;
+
+        else {
+          console.warn(`[${remoteJid}] ⚠️ Action desconhecida: "${action}"`);
         }
-      } catch(e) { console.error("Erro DB Action:", e.message); }
-    }
 
-    // 6. Resposta Final (Blindada contra amnésia)
-    let rawReply = aiResponse.reply?.trim();
-    if (!rawReply) {
-      if (hasChange) {
-        rawReply = "Prontinho, já deixei tudo registrado aqui para você! ✅";
-      } else {
-        rawReply = "Putz, dei uma engasgada aqui processando isso. Você pode me explicar de outra forma? 🤔";
+      } catch (actionErr) {
+        console.error(`[${remoteJid}] ❌ Erro na action "${action}":`, actionErr.message);
       }
+    } // fim for actions
+
+    // ─── Resposta final ────────────────────────────────────────────────────────
+    let finalReply = (aiResponse.reply || "").trim();
+
+    if (!finalReply) {
+      finalReply = hasChange
+        ? "Tudo registrado! ✅"
+        : "Não entendi bem. Pode me explicar de outra forma?";
     }
 
-    // Blindagem Final: Remove qualquer caractere de formatação (* ou _) antes de enviar
-    rawReply = rawReply.replace(/[*_]/g, '');
+    // Remove formatação Markdown que não funciona no WhatsApp
+    finalReply = finalReply.replace(/[*_`#]/g, '').trim();
 
-    const parts = [rawReply];
-
-    const finalReply = parts.join("\n\n");
-    const MAX_HISTORY_LEN = 400;
-    const contentToSave = finalReply.length > MAX_HISTORY_LEN 
-      ? finalReply.substring(0, MAX_HISTORY_LEN) + "... [relatório completo truncado para contexto]" 
-      : finalReply;
-    await prisma.message.create({ data: { user_id: user.id, role: "assistant", content: contentToSave } });
+    // Salva resposta no histórico (truncada para não inflar o contexto)
+    const MAX_SAVE = 400;
+    await prisma.message.create({
+      data: {
+        user_id: user.id,
+        role: "assistant",
+        content: finalReply.length > MAX_SAVE
+          ? finalReply.substring(0, MAX_SAVE) + "...[truncado]"
+          : finalReply
+      }
+    });
 
     const instanceName = instance || "main";
+    console.log(`[${remoteJid}] 📤 Enviando resposta (${finalReply.length} chars)...`);
+    await sendText(remoteJid, finalReply, instanceName);
 
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i].trim();
-      const isLastPart = i === parts.length - 1;
-      const hasTaskAction = uniqueActions.some(a => a.action === "TASK");
-      
-      try {
-        console.log(`[${remoteJid}] 📤 Enviando parte ${i + 1}/${parts.length}...`);
-        
-        // Sempre envia o texto principal como sendText para garantir entrega
-        await sendText(remoteJid, part, instanceName);
-
-        // Se for a última parte e houver ação de tarefa, tenta enviar botões extras
-        if (false && isLastPart && hasTaskAction) { // Botões desabilitados até handler de clique ser validado
-          console.log(`[${remoteJid}] ➕ Tentando enviar botões complementares...`);
-          await sendEvolutionButtons(remoteJid, "Selecione uma opção:", instanceName, [
-            { id: "confirm_task", text: "Ver Agenda 📅" },
-            { id: "done_last", text: "Concluir Última ✅" }
-          ]);
-        }
-      } catch (sendErr) {
-        console.error(`[${remoteJid}] ❌ Erro ao enviar parte ${i + 1}:`, sendErr.message);
-      }
-      
-      await new Promise(r => setTimeout(r, 1000));
-    }
-
-  } catch (err) { 
-    console.error("Erro Core:", err); 
+  } catch (err) {
+    console.error(`[${remoteJid}] ❌ Erro Core:`, err.message, err.stack);
+    try {
+      await sendText(remoteJid, "Ocorreu um erro interno. Por favor, tente novamente.", instance || "main");
+    } catch (_) { }
   } finally {
     userLocks.delete(remoteJid);
   }
 }
 
-// --- Helpers de Comunicação ---
+// ─── Helpers de Comunicação ────────────────────────────────────────────────────
+
 async function sendText(number, text, instance) {
   const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendText/${instance}`;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
     const res = await fetch(endpoint, {
@@ -571,14 +681,13 @@ async function sendText(number, text, instance) {
       body: JSON.stringify({ number, text }),
       signal: controller.signal
     });
-    
     if (res.ok) {
-      console.log(`[${number}] ✅ Mensagem enviada com sucesso.`);
+      console.log(`[${number}] ✅ Mensagem enviada.`);
     } else {
-      console.error(`[${number}] ❌ Erro ao enviar mensagem (${res.status}):`, await res.text());
+      console.error(`[${number}] ❌ Envio falhou (${res.status}):`, await res.text());
     }
   } catch (e) {
-    console.error(`[${number}] ❌ Erro sendText:`, e.message);
+    console.error(`[${number}] ❌ sendText erro:`, e.message);
   } finally {
     clearTimeout(timeoutId);
   }
@@ -586,16 +695,9 @@ async function sendText(number, text, instance) {
 
 async function sendEvolutionButtons(number, text, instance, buttons) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
-
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
   try {
     const endpoint = `${EVO_URL.replace(/\/$/, "")}/message/sendButtons/${instance}`;
-    const formattedButtons = buttons.map(b => ({
-      type: "reply",
-      displayText: b.text,
-      id: b.id
-    }));
-
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
@@ -604,145 +706,124 @@ async function sendEvolutionButtons(number, text, instance, buttons) {
         title: "Assessor Nico",
         description: text,
         footer: "Toque em um botão para agir",
-        buttons: formattedButtons
+        buttons: buttons.map(b => ({ type: "reply", displayText: b.text, id: b.id }))
       }),
       signal: controller.signal
     });
-
     if (!response.ok) {
-      const errData = await response.text();
-      console.error(`[${number}] ❌ Erro ao enviar botões (${response.status}):`, errData);
+      console.error(`[${number}] ❌ sendButtons falhou (${response.status}):`, await response.text());
       return false;
     }
-
-    console.log(`[${number}] ✅ Botões enviados com sucesso.`);
     return true;
   } catch (e) {
-    console.error(`[${number}] ❌ Erro sendButtons:`, e.message);
+    console.error(`[${number}] ❌ sendButtons erro:`, e.message);
     return false;
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
-// --- Servidor HTTP ---
+// ─── Servidor HTTP ─────────────────────────────────────────────────────────────
+
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
 
-  // ── ROTA DE RESET (Temporária: Limpeza Geral para Testes) ─────────────────────
+  // ── Reset de banco (apenas com token) ──────────────────────────────────────
   if (req.method === 'GET' && req.url.startsWith('/nico-reset-database-delete-all')) {
-    const urlParams = new URL(req.url, `http://localhost`).searchParams;
-    const tokenProvided = urlParams.get('token');
-    if (!RESET_SECRET || tokenProvided !== RESET_SECRET) {
-      res.writeHead(403, { "Content-Type": "text/plain" });
-      res.end("403 Forbidden");
-      return;
+    const params = new URL(req.url, `http://localhost`).searchParams;
+    if (!RESET_SECRET || params.get('token') !== RESET_SECRET) {
+      res.writeHead(403); return res.end("403 Forbidden");
     }
     try {
-      console.log("🧼 Iniciando limpeza completa via Rota de Servidor...");
-      // Ordem importa por causa das chaves estrangeiras
       await prisma.message.deleteMany({});
       await prisma.task.deleteMany({});
       await prisma.expense.deleteMany({});
-      try { await prisma.note.deleteMany({}); } catch (_) {}
+      try { await prisma.note.deleteMany({}); } catch (_) { }
       await prisma.user.deleteMany({});
-      
       res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end("✅ BANCO DE DADOS 100% ZERADO! O Nico esqueceu tudo. Já pode deletar esta rota do código.");
+      res.end("✅ Banco zerado com sucesso.");
     } catch (err) {
-      console.error("❌ Erro no reset de banco:", err.message);
-      res.writeHead(500);
-      res.end("❌ Erro no reset: " + err.message);
+      res.writeHead(500); res.end("❌ Erro: " + err.message);
     }
     return;
   }
 
   const cleanUrl = req.url.split('?')[0].replace(/\/$/, '');
 
-  // Health Check para o Easypanel não matar o container
+  // ── Health Check ───────────────────────────────────────────────────────────
   if (req.method === 'GET' && (cleanUrl === "" || cleanUrl === "/health")) {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     return res.end("Nico is alive! 🚀");
   }
 
-  // Webhook Stripe
+  // ── Webhook Stripe ─────────────────────────────────────────────────────────
   if (req.method === 'POST' && cleanUrl === '/webhook/stripe') {
     const chunks = [];
     req.on("data", c => chunks.push(c));
     req.on("end", async () => {
       try {
         const body = Buffer.concat(chunks);
-        let ev;
         const signature = req.headers['stripe-signature'];
+        let ev;
+
         if (STRIPE_WEBHOOK_SECRET && signature) {
           try {
             ev = stripe.webhooks.constructEvent(body, signature, STRIPE_WEBHOOK_SECRET);
           } catch (sigErr) {
-            console.error("[STRIPE Webhook] ❌ Assinatura inválida:", sigErr.message);
+            console.error("[STRIPE] ❌ Assinatura inválida:", sigErr.message);
             res.writeHead(400); res.end("Invalid signature"); return;
           }
         } else {
-          console.warn("[STRIPE Webhook] ⚠️ STRIPE_WEBHOOK_SECRET não configurado. Validando sem assinatura (inseguro em produção).");
+          console.warn("[STRIPE] ⚠️ Validando sem assinatura (configure STRIPE_WEBHOOK_SECRET em produção).");
           ev = JSON.parse(body.toString());
         }
-        console.log(`[STRIPE Webhook] Evento: ${ev.type}`);
+
+        console.log(`[STRIPE] Evento: ${ev.type}`);
 
         if (ev.type === 'checkout.session.completed') {
           const session = ev.data.object;
-          // Tenta pegar o telefone do client_reference_id OU do metadata 'whatsapp' 
-          // ou do campo customizado (se existir)
           let phone = session.client_reference_id || session.metadata?.whatsapp || session.customer_details?.phone;
-          
+
           if (phone) {
-            // Limpa o número (remove caracteres não numéricos)
             let cleanPhone = phone.replace(/[^\d]/g, '');
-            
-            // Inteligência para números BR: Se tiver 10 ou 11 dígitos, adiciona o 55
             if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith("55")) {
               cleanPhone = `55${cleanPhone}`;
             }
-
             if (!cleanPhone.includes("@s.whatsapp.net")) cleanPhone = `${cleanPhone}@s.whatsapp.net`;
 
-            console.log(`[STRIPE Webhook] 💰 Ativando acesso para: ${cleanPhone}`);
-            
-            // Busca se já existe um usuário com esse número ou variações de 9 dígito
-            const cPhoneNo9 = cleanPhone.replace(/^55(\d{2})9/, '55$1');
-            const cPhoneWith9 = cleanPhone.replace(/^55(\d{2})(\d{8})@/, '55$19$2@');
+            const cNo9 = cleanPhone.replace(/^55(\d{2})9/, '55$1');
+            const cWith9 = cleanPhone.replace(/^55(\d{2})(\d{8})@/, '55$19$2@');
 
-            const existingUser = await prisma.user.findFirst({
-              where: {
-                OR: [
-                  { phone_number: cleanPhone },
-                  { phone_number: cPhoneNo9 },
-                  { phone_number: cPhoneWith9 }
-                ]
-              }
+            const existing = await prisma.user.findFirst({
+              where: { OR: [{ phone_number: cleanPhone }, { phone_number: cNo9 }, { phone_number: cWith9 }] }
             });
 
-            if (existingUser) {
-              await prisma.user.update({ where: { id: existingUser.id }, data: { status: 'ACTIVE' } });
+            if (existing) {
+              await prisma.user.update({ where: { id: existing.id }, data: { status: 'ACTIVE' } });
             } else {
               await prisma.user.create({ data: { phone_number: cleanPhone, status: 'ACTIVE' } });
             }
-            
-            // Notificar usuário via WhatsApp
-            const instance = process.env.INSTANCE || "main";
-            await sendText(cleanPhone, "Opa! Recebi a confirmação do seu acesso. ✅ \n\nSou seu Assessor Nico e já estou pronto para te ajudar a organizar suas finanças e tarefas! 📈🚀 \n\nO que vamos registrar primeiro? Mande 'Gastei 50 no mercado' ou 'Lembrar de treinar às 18h'.", instance);
+
+            const inst = process.env.INSTANCE || "main";
+            await sendText(cleanPhone,
+              "Acesso confirmado! ✅\n\nSou seu Assessor Nico e já estou pronto para te ajudar com finanças e tarefas. 📈\n\nComeça mandando: \"gastei 50 no mercado\" ou \"me lembra de treinar às 18h\".",
+              inst
+            );
           }
         }
+
         res.writeHead(200); res.end();
-      } catch(e) { 
-        console.error("Erro Processamento Webhook Stripe:", e.message);
-        res.writeHead(400); res.end(); 
+      } catch (e) {
+        console.error("[STRIPE] Erro:", e.message);
+        res.writeHead(400); res.end();
       }
     });
     return;
   }
 
-  // Webhook Evolution (WhatsApp)
+  // ── Webhook Evolution (WhatsApp) ───────────────────────────────────────────
   if (req.method === "POST" && (cleanUrl === "/webhook/evolution" || cleanUrl === "/webhook")) {
     let body = "";
     req.on("data", c => body += c);
@@ -754,70 +835,75 @@ const server = http.createServer(async (req, res) => {
 
         const dataKey = payload.data?.key || payload.data?.message?.key || {};
         let remoteJid = dataKey.remoteJid || "";
-        const msgId     = dataKey.id || "";
+        const msgId = dataKey.id || "";
 
-        // Normalização de JID (Remove sufixos de multiconta :1 :2 etc)
+        // Normaliza JID (remove sufixo de multiconta :1 :2)
         if (remoteJid.includes(":")) {
           remoteJid = remoteJid.split(":")[0] + "@s.whatsapp.net";
         }
 
         if (dataKey.fromMe || !remoteJid || remoteJid.includes("@g.us")) return end200();
-        if (processedIds.has(msgId)) return end200(); // Ignora duplicatas
-        
+        if (processedIds.has(msgId)) return end200();
+
         processedIds.add(msgId);
-        setTimeout(() => processedIds.delete(msgId), 60000); // Limpa o ID após 1 min
+        setTimeout(() => processedIds.delete(msgId), 60000);
 
         const msgNode = payload.data?.message || payload.data;
-        let msgText = msgNode.conversation 
-          || msgNode.extendedTextMessage?.text 
-          || msgNode.imageMessage?.caption 
-          || msgNode.buttonsResponseMessage?.selectedButtonId
-          || msgNode.templateButtonReplyMessage?.selectedId
+        let msgText = msgNode?.conversation
+          || msgNode?.extendedTextMessage?.text
+          || msgNode?.imageMessage?.caption
+          || msgNode?.buttonsResponseMessage?.selectedButtonId
+          || msgNode?.templateButtonReplyMessage?.selectedId
           || "";
 
-        // Traduz IDs de botão para comandos de texto naturais
-        const buttonAliases = {
+        // Traduz IDs de botão para texto natural
+        const btnAliases = {
           "confirm_task": "mostrar minha agenda",
           "done_last": "concluir última tarefa"
         };
-        if (buttonAliases[msgText]) {
-          msgText = buttonAliases[msgText];
-        }
-        
-        // FILTRO DE RUÍDO (QA): Remove prefixos de teste e metadados que confundem a IA
-        msgText = msgText.replace(/\[TESTE \d+\/\d+\]/gi, '').replace(/^G\d+\s*·\s*[^\n]+\n?/i, '').replace(/^=/, '').trim();
+        if (btnAliases[msgText]) msgText = btnAliases[msgText];
+
+        // Remove prefixos de teste e ruídos
+        msgText = msgText
+          .replace(/\[TESTE \d+\/\d+\]/gi, '')
+          .replace(/^G\d+\s*·\s*[^\n]+\n?/i, '')
+          .replace(/^=/, '')
+          .trim();
 
         if (!msgText) return end200();
 
-        // DEBOUNCE LOGIC
+        // Debounce: aguarda DEBOUNCE_TIME ms antes de processar
         if (!messageBuffers.has(remoteJid)) messageBuffers.set(remoteJid, { texts: [], timer: null });
         const buffer = messageBuffers.get(remoteJid);
         buffer.texts.push(msgText);
 
         if (buffer.timer) clearTimeout(buffer.timer);
         buffer.timer = setTimeout(() => {
-          const attemptProcess = () => {
-             if (userLocks.has(remoteJid)) {
-               console.log(`[${remoteJid}] ⏳ Sistema ocupado com este usuário. Re-agendando em 1.5s...`);
-               setTimeout(attemptProcess, 1500);
-               return;
-             }
-             const fullMsg = buffer.texts.join("\n");
-             const instance = (payload.instance?._id || payload.instance || "main");
-             messageBuffers.delete(remoteJid);
-             processNicoCore(remoteJid, fullMsg, instance);
+          const tryProcess = () => {
+            if (userLocks.has(remoteJid)) {
+              console.log(`[${remoteJid}] ⏳ Ocupado, re-agendando em 1.5s...`);
+              setTimeout(tryProcess, 1500);
+              return;
+            }
+            const fullMsg = buffer.texts.join("\n");
+            const instName = payload.instance?._id || payload.instance || "main";
+            messageBuffers.delete(remoteJid);
+            processNicoCore(remoteJid, fullMsg, instName);
           };
-          attemptProcess();
+          tryProcess();
         }, DEBOUNCE_TIME);
 
         return end200();
-      } catch(e) { end200(); }
+      } catch (e) {
+        console.error("[WEBHOOK] Erro parse:", e.message);
+        end200();
+      }
     });
     return;
   }
 
-  // Static Files
-  let fPath = path.join(__dir, req.url === "/" ? "index.html" : req.url);
+  // ── Arquivos estáticos ─────────────────────────────────────────────────────
+  const fPath = path.join(__dir, req.url === "/" ? "index.html" : req.url);
   fs.readFile(fPath, (err, data) => {
     if (err) { res.writeHead(404); return res.end("Not found"); }
     const ext = path.extname(fPath);
@@ -827,4 +913,4 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-server.listen(PORT, () => console.log(`🚀 Nico Ativado na porta ${PORT}!`));
+server.listen(PORT, () => console.log(`🚀 Nico ativado na porta ${PORT}`));
