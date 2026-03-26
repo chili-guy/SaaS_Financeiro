@@ -440,6 +440,34 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
       }
     }
 
+    // Safeguard: IA confirmou deleção ("removidos", "apagados") sem gerar DELETE action
+    {
+      const deleteConfirmPatterns = [
+        /removidos?/i,
+        /apagados?/i,
+        /deletados?/i,
+        /limpos?/i,
+        /zerados?/i,
+        /exclu[íi]dos?/i,
+      ];
+      const hasDeleteAct = aiResponse.actions.some(a => a?.action === "DELETE");
+      const looksLikeDeleteConfirm = deleteConfirmPatterns.some(p => p.test(aiResponse.reply || ""));
+
+      if (looksLikeDeleteConfirm && !hasDeleteAct) {
+        const lowerMsg = msgText.toLowerCase();
+        let delType = null;
+        if (/\b(gastos?|despesas?)\b/.test(lowerMsg))               delType = "EXPENSES";
+        else if (/\b(receitas?|renda|entradas?)\b/.test(lowerMsg))   delType = "INCOMES";
+        else if (/\b(tarefas?|compromissos?)\b/.test(lowerMsg))      delType = "TASKS";
+        else if (/\b(tudo|todos|geral|completo)\b/.test(lowerMsg))   delType = "ALL";
+
+        if (delType) {
+          console.warn(`[${remoteJid}] ⚠️ Safeguard: confirmação de delete sem action. Injetando DELETE ${delType}.`);
+          aiResponse.actions.push({ action: "DELETE", parsedData: { type: delType, target: null } });
+        }
+      }
+    }
+
     // Deduplicação de ações idênticas
     const seenKeys = new Set();
     const uniqueActs = aiResponse.actions.filter(act => {
