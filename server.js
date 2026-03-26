@@ -246,8 +246,11 @@ Retorne APENAS um JSON válido, sem texto fora dele, sem blocos de código. Estr
    Exemplo input: "minha agenda" / "tenho algum compromisso?" / "o que tenho pra amanhã?" / "o que tenho hoje?"
    → { "actions": [{ "action": "QUERY", "parsedData": { "type": "TASKS", "date": null } }], "reply": "Aqui está sua agenda:" }
 
-   Exemplo input: "meu resumo" / "meu saldo"
+   Exemplo input: "meu resumo" / "meu saldo" / "panorama"
    → { "actions": [{ "action": "QUERY", "parsedData": { "type": "SUMMARY", "date": null } }], "reply": "Aqui está seu resumo:" }
+
+   Exemplo input: "resumo detalhado" / "detalhado o resumo" / "detalhe meus gastos e receitas"
+   → { "actions": [{ "action": "QUERY", "parsedData": { "type": "EXPENSES", "date": null } }, { "action": "QUERY", "parsedData": { "type": "INCOMES", "date": null } }], "reply": "Aqui está o detalhamento:" }
 
    Exemplo input: "minhas receitas de março"
    → { "actions": [{ "action": "QUERY", "parsedData": { "type": "INCOMES", "date": "2025-03" } }], "reply": "Aqui estão suas receitas de março:" }
@@ -258,12 +261,19 @@ Retorne APENAS um JSON válido, sem texto fora dele, sem blocos de código. Estr
    → { "action": "DONE", "parsedData": { "title": "reunião" } }
 
 6. APAGAR REGISTRO → action "DELETE"
-   Gatilhos: "apagar", "remover", "excluir", "deletar", "cancelar"
-   Para resetar tudo: type "ALL"
+   Gatilhos: "apagar", "remover", "excluir", "deletar", "cancelar", "limpar", "limpe", "zerar"
+   REGRA: "target" deve ser o nome específico do item. Para delete-all de um tipo, use target: null.
+   type "ALL" APENAS para "apaga tudo", "zera tudo", "reset" — NUNCA para pedidos específicos de um tipo.
    Exemplo input: "apaga o gasto do uber"
    → { "action": "DELETE", "parsedData": { "type": "EXPENSES", "target": "uber" } }
+   Exemplo input: "limpe meus gastos" / "remova todos os gastos" / "delete meus gastos"
+   → { "action": "DELETE", "parsedData": { "type": "EXPENSES", "target": null } }
+   Exemplo input: "remova minhas receitas"
+   → { "action": "DELETE", "parsedData": { "type": "INCOMES", "target": null } }
    Exemplo input: "apaga a tarefa de academia"
    → { "action": "DELETE", "parsedData": { "type": "TASKS", "target": "academia" } }
+   Exemplo input: "apaga tudo" / "zera tudo" / "reset"
+   → { "action": "DELETE", "parsedData": { "type": "ALL", "target": null } }
 
 7. SILENCIAR ALARME → action "TOGGLE_ALARM"
    Gatilhos: "desligar alarme", "silenciar lembrete", "parar de me avisar", "desative o lembrete"
@@ -624,10 +634,18 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
         // ── DELETE ───────────────────────────────────────────────────────────
         else if (action === "DELETE") {
           const delType = (parsedData.type || "ALL").toUpperCase();
-          const target = (parsedData.target || "").toLowerCase().trim();
           const rawLower = msgText.toLowerCase();
 
-          if (delType === "ALL" || rawLower.includes("tudo") || rawLower.includes("reset")) {
+          // target "todos"/"tudo"/"all" significa delete-all do tipo, não busca por nome
+          const rawTarget = (parsedData.target || "").toLowerCase().trim();
+          const genericTargets = ["todos", "tudo", "all", "todas", "tud"];
+          const target = genericTargets.includes(rawTarget) ? "" : rawTarget;
+
+          // Reset total: só se type=ALL OU mensagem contém "tudo"/"reset" E não especifica tipo
+          const isFullReset = delType === "ALL" || rawLower.includes("reset") ||
+            (rawLower.includes("tudo") && !rawLower.match(/\b(gastos?|despesas?|receitas?|tarefas?)\b/));
+
+          if (isFullReset) {
             await Promise.all([
               prisma.task.deleteMany({ where: { user_id: user.id } }),
               prisma.expense.deleteMany({ where: { user_id: user.id } }),
