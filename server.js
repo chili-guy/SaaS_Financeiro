@@ -641,9 +641,16 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
           const genericTargets = ["todos", "tudo", "all", "todas", "tud"];
           const target = genericTargets.includes(rawTarget) ? "" : rawTarget;
 
-          // Reset total: só se type=ALL OU mensagem contém "tudo"/"reset" E não especifica tipo
-          const isFullReset = delType === "ALL" || rawLower.includes("reset") ||
-            (rawLower.includes("tudo") && !rawLower.match(/\b(gastos?|despesas?|receitas?|tarefas?)\b/));
+          // Se a IA retornou type=ALL mas a mensagem menciona tipo específico, corrige para o tipo certo
+          let effectiveDelType = delType;
+          if (delType === "ALL") {
+            if (rawLower.match(/\b(gastos?|despesas?)\b/))       effectiveDelType = "EXPENSES";
+            else if (rawLower.match(/\b(receitas?|renda)\b/))    effectiveDelType = "INCOMES";
+            else if (rawLower.match(/\b(tarefas?|compromissos?)\b/)) effectiveDelType = "TASKS";
+          }
+
+          // Reset total: só se sem tipo específico na mensagem E sem keyword de tipo
+          const isFullReset = effectiveDelType === "ALL" || rawLower.includes("reset");
 
           if (isFullReset) {
             await Promise.all([
@@ -654,9 +661,9 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
             aiResponse.reply = "🗑️ Reset completo! Todos os seus registros foram removidos.";
             hasChange = true;
 
-          } else if (delType === "EXPENSES" || delType === "INCOMES") {
-            const model = delType === "EXPENSES" ? prisma.expense : prisma.income;
-            const label = delType === "EXPENSES" ? "Gasto" : "Receita";
+          } else if (effectiveDelType === "EXPENSES" || effectiveDelType === "INCOMES") {
+            const model = effectiveDelType === "EXPENSES" ? prisma.expense : prisma.income;
+            const label = effectiveDelType === "EXPENSES" ? "Gasto" : "Receita";
 
             if (target) {
               const record = await model.findFirst({
@@ -678,7 +685,7 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
               hasChange = true;
             }
 
-          } else if (delType === "TASKS") {
+          } else if (effectiveDelType === "TASKS") {
             if (target) {
               const task = await prisma.task.findFirst({
                 where: { user_id: user.id, title: { contains: target, mode: 'insensitive' } },
