@@ -35,6 +35,13 @@ const MIN_CALL_GAP_MS = 3500;
 
 // ─── Utilitários ──────────────────────────────────────────────────────────────
 
+// Remove lone surrogates (caracteres UTF-16 inválidos de alguns emojis do WhatsApp)
+// que causam HTTP 400 ao serializar o histórico para JSON na API da DeepSeek.
+function sanitizeText(str) {
+  if (!str) return "";
+  return str.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "");
+}
+
 function cleanTitle(title) {
   if (!title) return "";
   return title
@@ -130,9 +137,11 @@ async function processNicoCore(remoteJid, msgText, instance) {
       .slice(-16)                            // máximo 16 mensagens
       .map(m => ({
         role: m.role,
-        content: m.role === "assistant"
-          ? m.content.split("\n")[0].replace(/[✅🗑️📊📈📉]/g, '').substring(0, 100).trim()
-          : m.content
+        content: sanitizeText(
+          m.role === "assistant"
+            ? m.content.split("\n")[0].replace(/[✅🗑️📊📈📉]/g, '').substring(0, 100).trim()
+            : m.content
+        )
       }));
 
     // Salva mensagem atual ANTES de chamar a IA (para ficar no contexto da próxima)
@@ -317,7 +326,7 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
           headers: { "Content-Type": "application/json", "Authorization": `Bearer ${DEEPSEEK_API_KEY}` },
           body: JSON.stringify({
             model: "deepseek-chat",
-            messages: [{ role: "system", content: sysPrompt }, ...memory, { role: "user", content: msgText }],
+            messages: [{ role: "system", content: sanitizeText(sysPrompt) }, ...memory, { role: "user", content: sanitizeText(msgText) }],
             temperature: 0.1,
             max_tokens: 2048
           }),
