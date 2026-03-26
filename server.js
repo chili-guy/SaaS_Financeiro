@@ -266,8 +266,14 @@ Retorne APENAS um JSON válido, sem texto fora dele, sem blocos de código. Estr
    → { "action": "DELETE", "parsedData": { "type": "TASKS", "target": "academia" } }
 
 7. SILENCIAR ALARME → action "TOGGLE_ALARM"
-   Gatilhos: "desligar alarme", "silenciar lembrete", "parar de me avisar"
-   Exemplo: { "action": "TOGGLE_ALARM", "parsedData": { "target": "todos", "active": false } }
+   Gatilhos: "desligar alarme", "silenciar lembrete", "parar de me avisar", "desative o lembrete"
+   REGRA: Se o usuário disser "desative o lembrete" sem especificar tarefa, verifique o histórico da conversa.
+   Se a última tarefa criada estiver no histórico (ex: "Tarefa registrada: Call com a Raquel"), use-a como alvo.
+   Só use target "todos" se o usuário pedir explicitamente ("todos os lembretes", "todas as tarefas").
+   Exemplo (tarefa recente no histórico): "desative o lembrete"
+   → { "action": "TOGGLE_ALARM", "parsedData": { "target": "Call com a Raquel", "active": false } }
+   Exemplo (pedido genérico): "desative todos os lembretes"
+   → { "action": "TOGGLE_ALARM", "parsedData": { "target": "todos", "active": false } }
 
 === REGRAS CRÍTICAS ===
 
@@ -321,8 +327,7 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
             model: "deepseek-chat",
             messages: [{ role: "system", content: sysPrompt }, ...memory, { role: "user", content: msgText }],
             temperature: 0.1,
-            max_tokens: 2048,
-            response_format: { type: "json_object" }
+            max_tokens: 2048
           }),
           signal: ctrl.signal
         });
@@ -334,7 +339,7 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
 
           // Rate limit (429) ou erro de servidor (5xx): aguarda e tenta de novo
           if (attempt < 4 && (upstream.status === 429 || upstream.status >= 500)) {
-            const wait = attempt * 5000; // 5s, 10s, 15s
+            const wait = attempt * 3000; // 3s, 6s, 9s
             console.log(`[${remoteJid}] ⏳ HTTP ${upstream.status} — aguardando ${wait}ms...`);
             await new Promise(r => setTimeout(r, wait));
             return callDeepSeek(attempt + 1);
@@ -349,7 +354,7 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
         // Resposta vazia = DeepSeek engasgou (rate limit silencioso ou context issue)
         if (!rawContent) {
           if (attempt < 4) {
-            const wait = attempt * 4000; // 4s, 8s, 12s
+            const wait = attempt * 2000; // 2s, 4s, 6s
             console.warn(`[${remoteJid}] ⚠️ Resposta vazia (tentativa ${attempt}). Aguardando ${wait}ms...`);
             await new Promise(r => setTimeout(r, wait));
             return callDeepSeek(attempt + 1);
@@ -724,8 +729,14 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
       const queryTypes = uniqueActs.filter(a => a.action === "QUERY").map(a => a.parsedData?.type || "SUMMARY").join(", ");
       replyToSave = `Consulta realizada: ${queryTypes}`;
     } else {
-      // Para ações (EXPENSE, INCOME, TASK, etc), salva só a primeira linha da confirmação
-      replyToSave = finalReply.split("\n")[0].substring(0, 120);
+      // Para TASK: salva título para que mensagens seguintes (ex: "desative o lembrete") saibam o alvo
+      const taskAct = uniqueActs.find(a => a.action === "TASK");
+      if (taskAct?.parsedData?.title) {
+        replyToSave = `Tarefa registrada: ${taskAct.parsedData.title}`;
+      } else {
+        // Para demais ações, salva primeira linha da confirmação
+        replyToSave = finalReply.split("\n")[0].substring(0, 120);
+      }
     }
 
     await prisma.message.create({
