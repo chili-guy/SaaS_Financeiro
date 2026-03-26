@@ -11,6 +11,7 @@ import './scheduler.js';
 // --- Configuração e Iniciação ---
 const prisma = new PrismaClient();
 const __dir = path.dirname(fileURLToPath(import.meta.url));
+
 const PORT = process.env.PORT || 3000;
 const EVO_URL = process.env.EVOLUTION_API_URL || "http://127.0.0.1:8080";
 const EVO_KEY = process.env.EVOLUTION_API_KEY || "FInAgentAPISecretKey_2026";
@@ -26,7 +27,7 @@ const RESET_SECRET = process.env.RESET_SECRET || "";
 const messageBuffers = new Map();
 const processedIds = new Set();
 const userLocks = new Set();
-const DEBOUNCE_TIME = 500;
+const DEBOUNCE_TIME = 4000; // 4s — agrupa mensagens rápidas em uma única chamada à IA
 
 // ─── Utilitários ──────────────────────────────────────────────────────────────
 
@@ -272,54 +273,86 @@ R6. DATAS RELATIVAS: Resolva baseado na data atual (${dataAtual}).
 R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "actions": [] e responda no "reply".`;
 
     // ─── Chamada IA ────────────────────────────────────────────────────────────
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 28000);
 
-    let aiResponse = { actions: [], reply: "" };
+    // Função auxiliar: chama DeepSeek com retry automático se resposta vier vazia
+    async function callDeepSeek(attempt = 1) {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 28000);
 
-    try {
-      const upstream = await fetch("https://api.deepseek.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${DEEPSEEK_API_KEY}` },
-        body: JSON.stringify({
-          model: "deepseek-chat",
-          messages: [{ role: "system", content: sysPrompt }, ...memory, { role: "user", content: msgText }],
-          temperature: 0.05,
-          max_tokens: 2048,
-          response_format: { type: "json_object" }
-        }),
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
+      try {
+        const upstream = await fetch("https://api.deepseek.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${DEEPSEEK_API_KEY}` },
+          body: JSON.stringify({
+            model: "deepseek-chat",
+            messages: [{ role: "system", content: sysPrompt }, ...memory, { role: "user", content: msgText }],
+            temperature: 0.1,
+            max_tokens: 2048
+          }),
+          signal: ctrl.signal
+        });
+        clearTimeout(tid);
 
-      if (!upstream.ok) {
-        const errText = await upstream.text();
-        console.error(`[${remoteJid}] ❌ DeepSeek HTTP ${upstream.status}:`, errText);
-        aiResponse.reply = "Tive um problema técnico momentâneo. Pode tentar novamente? 🧠";
-      } else {
-        const dsData = await upstream.json();
-        const rawContent = dsData.choices?.[0]?.message?.content || "";
-        console.log(`[AI RAW - ${remoteJid}]`, rawContent.substring(0, 500));
+        if (!upstream.ok) {
+          const errText = await upstream.text();
+          console.error(`[${remoteJid}] ❌ DeepSeek HTTP ${upstream.status} (tentativa ${attempt}):`, errText);
 
-        try {
-          // Extrai JSON mesmo se vier com texto ao redor (failsafe)
-          const s = rawContent.indexOf('{');
-          const e = rawContent.lastIndexOf('}');
-          if (s !== -1 && e !== -1) {
-            aiResponse = JSON.parse(rawContent.substring(s, e + 1));
-          } else {
-            aiResponse.reply = rawContent.trim();
+          // Rate limit (429) ou erro de servidor (5xx): aguarda e tenta de novo
+          if (attempt < 3 && (upstream.status === 429 || upstream.status >= 500)) {
+            const wait = attempt * 3000; // 3s, 6s
+            console.log(`[${remoteJid}] ⏳ Aguardando ${wait}ms antes de tentar novamente...`);
+            await new Promise(r => setTimeout(r, wait));
+            return callDeepSeek(attempt + 1);
           }
-        } catch (parseErr) {
-          console.error(`[${remoteJid}] ❌ JSON parse falhou:`, parseErr.message, "| Raw:", rawContent.substring(0, 200));
-          // Tenta usar o texto cru como reply em vez de travar
-          aiResponse.reply = rawContent.replace(/[*_`#]/g, '').trim() || "Não consegui processar corretamente. Pode repetir de outra forma?";
+          return null; // falha definitiva
         }
+
+        const dsData = await upstream.json();
+        const rawContent = (dsData.choices?.[0]?.message?.content || "").trim();
+        console.log(`[AI RAW - ${remoteJid}] (tentativa ${attempt}):`, rawContent.substring(0, 300));
+
+        // Resposta vazia = DeepSeek engasgou (rate limit silencioso ou context issue)
+        if (!rawContent) {
+          if (attempt < 3) {
+            const wait = attempt * 2500; // 2.5s, 5s
+            console.warn(`[${remoteJid}] ⚠️ Resposta vazia da IA. Aguardando ${wait}ms e tentando novamente...`);
+            await new Promise(r => setTimeout(r, wait));
+            return callDeepSeek(attempt + 1);
+          }
+          console.error(`[${remoteJid}] ❌ 3 tentativas falharam com resposta vazia.`);
+          return null;
+        }
+
+        return rawContent;
+
+      } catch (fetchErr) {
+        clearTimeout(tid);
+        console.error(`[${remoteJid}] ❌ Fetch DeepSeek (tentativa ${attempt}):`, fetchErr.message);
+        if (attempt < 3) {
+          await new Promise(r => setTimeout(r, attempt * 2000));
+          return callDeepSeek(attempt + 1);
+        }
+        return null;
       }
-    } catch (fetchErr) {
-      clearTimeout(timeoutId);
-      console.error(`[${remoteJid}] ❌ Fetch DeepSeek:`, fetchErr.message);
-      aiResponse.reply = "Estou com instabilidade na conexão. Tente novamente em instantes.";
+    }
+
+    const rawContent = await callDeepSeek();
+
+    if (!rawContent) {
+      aiResponse.reply = "Tive uma instabilidade técnica agora. Pode repetir sua mensagem?";
+    } else {
+      try {
+        const s = rawContent.indexOf('{');
+        const e = rawContent.lastIndexOf('}');
+        if (s !== -1 && e !== -1) {
+          aiResponse = JSON.parse(rawContent.substring(s, e + 1));
+        } else {
+          aiResponse.reply = rawContent.replace(/[*_`#]/g, '').trim();
+        }
+      } catch (parseErr) {
+        console.error(`[${remoteJid}] ❌ JSON parse falhou:`, parseErr.message, "| Raw:", rawContent.substring(0, 200));
+        aiResponse.reply = rawContent.replace(/[*_`#]/g, '').trim() || "Não consegui processar. Pode repetir de outra forma?";
+      }
     }
 
     // ─── Execução de Ações ─────────────────────────────────────────────────────
@@ -641,15 +674,17 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
     // Remove formatação Markdown que não funciona no WhatsApp
     finalReply = finalReply.replace(/[*_`#]/g, '').trim();
 
-    // Salva resposta no histórico (truncada para não inflar o contexto)
-    const MAX_SAVE = 400;
+    // Salva no histórico uma versão limpa e curta — NÃO salva extratos/relatórios longos
+    // pois isso confunde o modelo nas próximas chamadas sobre o formato esperado
+    const MAX_SAVE = 300;
+    const replyToSave = hasChange
+      ? finalReply.split("\n")[0].substring(0, MAX_SAVE) // só a primeira linha da confirmação
+      : finalReply.substring(0, MAX_SAVE);
     await prisma.message.create({
       data: {
         user_id: user.id,
         role: "assistant",
-        content: finalReply.length > MAX_SAVE
-          ? finalReply.substring(0, MAX_SAVE) + "...[truncado]"
-          : finalReply
+        content: replyToSave.length > MAX_SAVE ? replyToSave.substring(0, MAX_SAVE) + "..." : replyToSave
       }
     });
 
