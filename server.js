@@ -403,16 +403,31 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
     // Garante que actions é sempre um array válido
     if (!Array.isArray(aiResponse.actions)) aiResponse.actions = [];
 
-    // Safeguard: IA retornou "Consulta realizada: X" como reply sem gerar a QUERY action.
-    // Detecta e injeta a action correta para que os dados sejam buscados normalmente.
+    // Safeguard: IA ecoou uma frase de introdução de query (padrão do histórico)
+    // sem gerar a QUERY action — injeta a action correta baseado na mensagem do usuário.
     {
-      const crMatch = (aiResponse.reply || "").match(/^Consulta realizada:\s*(TASKS|EXPENSES|INCOMES|SUMMARY)/i);
+      const echoPatterns = [
+        /^Consulta realizada:/i,
+        /^Aqui estão (seus|suas)/i,
+        /^Aqui está (seu|sua)/i,
+        /^Mostrei os dados/i,
+      ];
       const hasQueryAct = aiResponse.actions.some(a => a?.action === "QUERY");
-      if (crMatch && !hasQueryAct) {
-        const queryType = crMatch[1].toUpperCase();
-        console.warn(`[${remoteJid}] ⚠️ Safeguard: IA retornou label interno. Injetando QUERY ${queryType}.`);
-        aiResponse.actions.push({ action: "QUERY", parsedData: { type: queryType, date: null } });
-        aiResponse.reply = "";
+      const looksLikeEcho = echoPatterns.some(p => p.test(aiResponse.reply || ""));
+
+      if (looksLikeEcho && !hasQueryAct) {
+        const lowerMsg = msgText.toLowerCase();
+        let queryType = null;
+        if (/\b(gastos?|despesas?|extrato|gast[ei]|pagu[ei]|compra[ei]|saiu)\b/.test(lowerMsg))        queryType = "EXPENSES";
+        else if (/\b(receitas?|entrad[ao]s?|salário|renda|recebi|entrou)\b/.test(lowerMsg))             queryType = "INCOMES";
+        else if (/\b(tarefas?|agenda|compromisso|amanhã|hoje|semana|lembretes?)\b/.test(lowerMsg))      queryType = "TASKS";
+        else if (/\b(resumo|saldo|balanço|situação financeira|quanto tenho)\b/.test(lowerMsg))          queryType = "SUMMARY";
+
+        if (queryType) {
+          console.warn(`[${remoteJid}] ⚠️ Safeguard: eco detectado. Injetando QUERY ${queryType}.`);
+          aiResponse.actions.push({ action: "QUERY", parsedData: { type: queryType, date: null } });
+          aiResponse.reply = "";
+        }
       }
     }
 
@@ -739,9 +754,10 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
     const hasQuery = uniqueActs.some(a => a.action === "QUERY");
     let replyToSave;
     if (hasQuery) {
-      // Salva a fala introdutória da IA (ex: "Aqui estão seus gastos:")
-      // NÃO usar label sintético como "Consulta realizada: X" — a IA aprende a replicá-lo
-      replyToSave = finalReply.split("\n")[0].substring(0, 120).trim() || "Dados consultados.";
+      // Salva label neutro que não começa com "Aqui estão/está" para evitar eco.
+      // O safeguard captura qualquer echo (Consulta realizada / Aqui estão / Aqui está).
+      const queryTypes = uniqueActs.filter(a => a.action === "QUERY").map(a => a.parsedData?.type || "SUMMARY").join(", ");
+      replyToSave = `Mostrei os dados: ${queryTypes}`;
     } else {
       // Para TASK: salva título para que mensagens seguintes (ex: "desative o lembrete") saibam o alvo
       const taskAct = uniqueActs.find(a => a.action === "TASK");
