@@ -266,7 +266,7 @@ Retorne APENAS um JSON válido, sem texto fora dele, sem blocos de código. Estr
    type "ALL" APENAS para "apaga tudo", "zera tudo", "reset" — NUNCA para pedidos específicos de um tipo.
    Exemplo input: "apaga o gasto do uber"
    → { "action": "DELETE", "parsedData": { "type": "EXPENSES", "target": "uber" } }
-   Exemplo input: "limpe meus gastos" / "remova todos os gastos" / "delete meus gastos"
+   Exemplo input: "limpe meus gastos" / "remova meus gastos" / "remova todos os gastos" / "delete meus gastos"
    → { "action": "DELETE", "parsedData": { "type": "EXPENSES", "target": null } }
    Exemplo input: "remova minhas receitas"
    → { "action": "DELETE", "parsedData": { "type": "INCOMES", "target": null } }
@@ -636,9 +636,13 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
           const delType = (parsedData.type || "ALL").toUpperCase();
           const rawLower = msgText.toLowerCase();
 
-          // target "todos"/"tudo"/"all" significa delete-all do tipo, não busca por nome
+          // target genérico (possessivos, artigos, tipo-espelho) → delete-all, não busca por nome
           const rawTarget = (parsedData.target || "").toLowerCase().trim();
-          const genericTargets = ["todos", "tudo", "all", "todas", "tud"];
+          const genericTargets = [
+            "todos", "tudo", "all", "todas", "tud",
+            "meus", "minhas", "meu", "minha", "os", "as",
+            "gastos", "despesas", "receitas", "tarefas", "compromissos", "registros"
+          ];
           const target = genericTargets.includes(rawTarget) ? "" : rawTarget;
 
           // Se a IA retornou type=ALL mas a mensagem menciona tipo específico, corrige para o tipo certo
