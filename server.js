@@ -120,12 +120,16 @@ async function processNicoCore(remoteJid, msgText, instance) {
       take: 20
     });
     // Sanitiza o histórico: mantém contexto sem poluir o modo json_object
-    const memory = history.reverse().map(m => ({
-      role: m.role,
-      content: m.role === "assistant"
-        ? m.content.split("\n")[0].replace(/[✅🗑️📊]/g, '').substring(0, 100).trim()
-        : m.content
-    }));
+    // Filtra mensagens longas (extratos antigos) para não estourar contexto
+    const memory = history.reverse()
+      .filter(m => m.content.length < 300) // descarta extratos grandes salvos anteriormente
+      .slice(-16)                            // máximo 16 mensagens
+      .map(m => ({
+        role: m.role,
+        content: m.role === "assistant"
+          ? m.content.split("\n")[0].replace(/[✅🗑️📊📈📉]/g, '').substring(0, 100).trim()
+          : m.content
+      }));
 
     // Salva mensagem atual ANTES de chamar a IA (para ficar no contexto da próxima)
     await prisma.message.create({ data: { user_id: user.id, role: "user", content: msgText } });
@@ -687,18 +691,21 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
     // Remove formatação Markdown que não funciona no WhatsApp
     finalReply = finalReply.replace(/[*_`#]/g, '').trim();
 
-    // Salva no histórico uma versão limpa e curta — NÃO salva extratos/relatórios longos
-    // pois isso confunde o modelo nas próximas chamadas sobre o formato esperado
-    const MAX_SAVE = 300;
-    const replyToSave = hasChange
-      ? finalReply.split("\n")[0].substring(0, MAX_SAVE) // só a primeira linha da confirmação
-      : finalReply.substring(0, MAX_SAVE);
+    // Salva no histórico apenas um resumo curto e limpo.
+    // NUNCA salva extratos/relatórios — eles estouram o contexto da IA nas próximas chamadas.
+    const hasQuery = uniqueActs.some(a => a.action === "QUERY");
+    let replyToSave;
+    if (hasQuery) {
+      // Para consultas, salva só o tipo de dado consultado — não o conteúdo
+      const queryTypes = uniqueActs.filter(a => a.action === "QUERY").map(a => a.parsedData?.type || "SUMMARY").join(", ");
+      replyToSave = `Consulta realizada: ${queryTypes}`;
+    } else {
+      // Para ações (EXPENSE, INCOME, TASK, etc), salva só a primeira linha da confirmação
+      replyToSave = finalReply.split("\n")[0].substring(0, 120);
+    }
+
     await prisma.message.create({
-      data: {
-        user_id: user.id,
-        role: "assistant",
-        content: replyToSave.length > MAX_SAVE ? replyToSave.substring(0, MAX_SAVE) + "..." : replyToSave
-      }
+      data: { user_id: user.id, role: "assistant", content: replyToSave }
     });
 
     const instanceName = instance || "main";
