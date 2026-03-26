@@ -29,6 +29,10 @@ const processedIds = new Set();
 const userLocks = new Set();
 const DEBOUNCE_TIME = 4000; // 4s — agrupa mensagens rápidas em uma única chamada à IA
 
+// Rate limit global DeepSeek: garante mínimo de 2s entre chamadas consecutivas
+let lastDeepSeekCall = 0;
+const MIN_CALL_GAP_MS = 2000;
+
 // ─── Utilitários ──────────────────────────────────────────────────────────────
 
 function cleanTitle(title) {
@@ -286,6 +290,17 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
 
     // Função auxiliar: chama DeepSeek com retry automático se resposta vier vazia
     async function callDeepSeek(attempt = 1) {
+
+      // Throttle global: respeita o gap mínimo entre chamadas para evitar rate limit
+      const now = Date.now();
+      const sinceLastCall = now - lastDeepSeekCall;
+      if (sinceLastCall < MIN_CALL_GAP_MS) {
+        const waitMs = MIN_CALL_GAP_MS - sinceLastCall;
+        console.log(`[${remoteJid}] ⏱️ Throttle DeepSeek: aguardando ${waitMs}ms...`);
+        await new Promise(r => setTimeout(r, waitMs));
+      }
+      lastDeepSeekCall = Date.now();
+
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 28000);
 
@@ -309,9 +324,9 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
           console.error(`[${remoteJid}] ❌ DeepSeek HTTP ${upstream.status} (tentativa ${attempt}):`, errText);
 
           // Rate limit (429) ou erro de servidor (5xx): aguarda e tenta de novo
-          if (attempt < 3 && (upstream.status === 429 || upstream.status >= 500)) {
-            const wait = attempt * 3000; // 3s, 6s
-            console.log(`[${remoteJid}] ⏳ Aguardando ${wait}ms antes de tentar novamente...`);
+          if (attempt < 4 && (upstream.status === 429 || upstream.status >= 500)) {
+            const wait = attempt * 5000; // 5s, 10s, 15s
+            console.log(`[${remoteJid}] ⏳ HTTP ${upstream.status} — aguardando ${wait}ms...`);
             await new Promise(r => setTimeout(r, wait));
             return callDeepSeek(attempt + 1);
           }
@@ -324,13 +339,13 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
 
         // Resposta vazia = DeepSeek engasgou (rate limit silencioso ou context issue)
         if (!rawContent) {
-          if (attempt < 3) {
-            const wait = attempt * 2500; // 2.5s, 5s
-            console.warn(`[${remoteJid}] ⚠️ Resposta vazia da IA. Aguardando ${wait}ms e tentando novamente...`);
+          if (attempt < 4) {
+            const wait = attempt * 4000; // 4s, 8s, 12s
+            console.warn(`[${remoteJid}] ⚠️ Resposta vazia (tentativa ${attempt}). Aguardando ${wait}ms...`);
             await new Promise(r => setTimeout(r, wait));
             return callDeepSeek(attempt + 1);
           }
-          console.error(`[${remoteJid}] ❌ 3 tentativas falharam com resposta vazia.`);
+          console.error(`[${remoteJid}] ❌ 4 tentativas falharam com resposta vazia.`);
           return null;
         }
 
