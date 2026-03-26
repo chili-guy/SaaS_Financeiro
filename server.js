@@ -249,8 +249,8 @@ Nota: Se o usuário pedir para você 'Parar de mandar mensagem', responda que en
       body: JSON.stringify({
         model: "deepseek-chat",
         messages: [{ role: "system", "content": sysPrompt }, ...memory, { role: "user", "content": msgText }],
-        temperature: 0.2
-        // response_format: { type: "json_object" } 
+        temperature: 0.1,
+        response_format: { type: "json_object" } 
       }),
       signal: controller.signal
     }).finally(() => clearTimeout(timeoutId));
