@@ -119,7 +119,13 @@ async function processNicoCore(remoteJid, msgText, instance) {
       orderBy: { created_at: 'desc' },
       take: 20
     });
-    const memory = history.reverse().map(m => ({ role: m.role, content: m.content }));
+    // Sanitiza o histórico: mensagens do assistente viram texto simples para não conflitar com json_object mode
+    const memory = history.reverse().map(m => ({
+      role: m.role,
+      content: m.role === "assistant"
+        ? `[Resposta anterior resumida]: ${m.content.split("\n")[0].substring(0, 120)}`
+        : m.content
+    }));
 
     // Salva mensagem atual ANTES de chamar a IA (para ficar no contexto da próxima)
     await prisma.message.create({ data: { user_id: user.id, role: "user", content: msgText } });
@@ -287,7 +293,8 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
             model: "deepseek-chat",
             messages: [{ role: "system", content: sysPrompt }, ...memory, { role: "user", content: msgText }],
             temperature: 0.1,
-            max_tokens: 2048
+            max_tokens: 2048,
+            response_format: { type: "json_object" }
           }),
           signal: ctrl.signal
         });
@@ -335,6 +342,8 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
         return null;
       }
     }
+
+    let aiResponse = { actions: [], reply: "" };
 
     const rawContent = await callDeepSeek();
 
