@@ -31,7 +31,7 @@ const DEBOUNCE_TIME = 4000; // 4s — agrupa mensagens rápidas em uma única ch
 
 // Rate limit global DeepSeek: garante mínimo de 2s entre chamadas consecutivas
 let lastDeepSeekCall = 0;
-const MIN_CALL_GAP_MS = 2000;
+const MIN_CALL_GAP_MS = 3500;
 
 // ─── Utilitários ──────────────────────────────────────────────────────────────
 
@@ -227,19 +227,28 @@ Retorne APENAS um JSON válido, sem texto fora dele, sem blocos de código. Estr
    → { "action": "TASK", "parsedData": { "title": "Pagar aluguel", "due_date": "2025-01-15T09:00:00", "remind": true } }
 
 4. CONSULTAR DADOS → action "QUERY"
-   Gatilhos: "mostrar", "listar", "ver", "quais são", "quanto gastei", "extrato", "relatório", "meus gastos", "minha agenda", "resumo", "saldo", "tarefas", "compromissos"
+   Gatilhos: "mostrar", "listar", "ver", "quais são", "quanto gastei", "extrato", "relatório", "meus gastos", "minha agenda", "resumo", "saldo", "tarefas", "compromissos", "o que tenho", "o que está", "meu dia", "hoje", "amanhã", "essa semana", "tenho algo", "tem algo", "algum compromisso", "alguma tarefa"
    IMPORTANTE: Você DEVE usar QUERY para qualquer pedido de visualização. Nunca escreva listas no campo "reply".
    Tipos disponíveis: "TASKS", "EXPENSES", "INCOMES", "SUMMARY"
-   
+
    Exemplo input: "quanto gastei esse mês"
    → { "action": "QUERY", "parsedData": { "type": "EXPENSES", "date": null } }
-   
+
    Exemplo input: "minha agenda"
    → { "action": "QUERY", "parsedData": { "type": "TASKS", "date": null } }
-   
+
+   Exemplo input: "o que tenho pra amanhã?"
+   → { "action": "QUERY", "parsedData": { "type": "TASKS", "date": null } }
+
+   Exemplo input: "o que tenho hoje?"
+   → { "action": "QUERY", "parsedData": { "type": "TASKS", "date": null } }
+
+   Exemplo input: "tenho algum compromisso?"
+   → { "action": "QUERY", "parsedData": { "type": "TASKS", "date": null } }
+
    Exemplo input: "meu resumo / saldo"
    → { "action": "QUERY", "parsedData": { "type": "SUMMARY", "date": null } }
-   
+
    Exemplo input: "minhas receitas de março"
    → { "action": "QUERY", "parsedData": { "type": "INCOMES", "date": "2025-03" } }
 
