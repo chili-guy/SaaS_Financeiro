@@ -418,16 +418,15 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
       if (looksLikeEcho && !hasQueryAct) {
         const lowerMsg = msgText.toLowerCase();
         let queryType = null;
-        if (/\b(gastos?|despesas?|extrato|gast[ei]|pagu[ei]|compra[ei]|saiu)\b/.test(lowerMsg))        queryType = "EXPENSES";
-        else if (/\b(receitas?|entrad[ao]s?|salário|renda|recebi|entrou)\b/.test(lowerMsg))             queryType = "INCOMES";
-        else if (/\b(tarefas?|agenda|compromisso|amanhã|hoje|semana|lembretes?)\b/.test(lowerMsg))      queryType = "TASKS";
-        else if (/\b(resumo|saldo|balanço|situação financeira|quanto tenho)\b/.test(lowerMsg))          queryType = "SUMMARY";
+        if (/\b(gastos?|despesas?|extrato|gast[ei]|pagu[ei]|compra[ei]|saiu)\b/.test(lowerMsg))                           queryType = "EXPENSES";
+        else if (/\b(receitas?|entrad[ao]s?|sal[aá]rio|renda|recebi|entrou)\b/.test(lowerMsg))                            queryType = "INCOMES";
+        else if (/\b(tarefas?|agenda|compromisso|amanh[aã]|hoje|semana|lembretes?)\b/.test(lowerMsg))                     queryType = "TASKS";
+        else if (/\b(resumo|saldo|balan[cç]o|situa[cç][aã]o|panorama|vis[aã]o|geral|como estou|quanto tenho)\b/.test(lowerMsg)) queryType = "SUMMARY";
+        else queryType = "SUMMARY"; // fallback: eco detectado mas sem keyword → consulta geral
 
-        if (queryType) {
-          console.warn(`[${remoteJid}] ⚠️ Safeguard: eco detectado. Injetando QUERY ${queryType}.`);
-          aiResponse.actions.push({ action: "QUERY", parsedData: { type: queryType, date: null } });
-          aiResponse.reply = "";
-        }
+        console.warn(`[${remoteJid}] ⚠️ Safeguard: eco detectado. Injetando QUERY ${queryType}.`);
+        aiResponse.actions.push({ action: "QUERY", parsedData: { type: queryType, date: null } });
+        aiResponse.reply = "";
       }
     }
 
