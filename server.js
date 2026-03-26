@@ -119,11 +119,11 @@ async function processNicoCore(remoteJid, msgText, instance) {
       orderBy: { created_at: 'desc' },
       take: 20
     });
-    // Sanitiza o histórico: mensagens do assistente viram texto simples para não conflitar com json_object mode
+    // Sanitiza o histórico: mantém contexto sem poluir o modo json_object
     const memory = history.reverse().map(m => ({
       role: m.role,
       content: m.role === "assistant"
-        ? `[Resposta anterior resumida]: ${m.content.split("\n")[0].substring(0, 120)}`
+        ? m.content.split("\n")[0].replace(/[✅🗑️📊]/g, '').substring(0, 100).trim()
         : m.content
     }));
 
@@ -501,13 +501,17 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
 
           } else if (queryType === "EXPENSES") {
             const exps = await prisma.expense.findMany({
-              where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' }
+              where: { user_id: user.id, ...(parsedData.date ? { date: dateFilter } : { date: { gte: firstDayMonth } }) },
+              orderBy: { date: 'desc' },
+              take: 50
             });
             queryResult = formatFinanceRecords(exps, "EXPENSE");
 
           } else if (queryType === "INCOMES") {
             const incs = await prisma.income.findMany({
-              where: { user_id: user.id, date: dateFilter }, orderBy: { date: 'desc' }
+              where: { user_id: user.id, ...(parsedData.date ? { date: dateFilter } : {}) },
+              orderBy: { date: 'desc' },
+              take: 50
             });
             queryResult = formatFinanceRecords(incs, "INCOME");
 
