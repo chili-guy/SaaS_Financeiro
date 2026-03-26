@@ -725,9 +725,9 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
     const hasQuery = uniqueActs.some(a => a.action === "QUERY");
     let replyToSave;
     if (hasQuery) {
-      // Para consultas, salva só o tipo de dado consultado — não o conteúdo
-      const queryTypes = uniqueActs.filter(a => a.action === "QUERY").map(a => a.parsedData?.type || "SUMMARY").join(", ");
-      replyToSave = `Consulta realizada: ${queryTypes}`;
+      // Salva a fala introdutória da IA (ex: "Aqui estão seus gastos:")
+      // NÃO usar label sintético como "Consulta realizada: X" — a IA aprende a replicá-lo
+      replyToSave = finalReply.split("\n")[0].substring(0, 120).trim() || "Dados consultados.";
     } else {
       // Para TASK: salva título para que mensagens seguintes (ex: "desative o lembrete") saibam o alvo
       const taskAct = uniqueActs.find(a => a.action === "TASK");
