@@ -310,7 +310,13 @@ R5. INTENÇÃO VAGA: Se o pedido for impreciso, execute o que conseguir e peça 
 R6. DATAS RELATIVAS: Resolva baseado na data atual (${dataAtual}).
     "hoje" → data de hoje, "amanhã" → data de amanhã, "semana que vem" → próxima segunda.
 
-R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "actions": [] e responda no "reply".`;
+R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "actions": [] e responda no "reply".
+
+R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EXIGE a action correspondente em "actions".
+    PROIBIDO: escrever "receita registrada" sem action INCOME em "actions".
+    PROIBIDO: escrever "gasto registrado" sem action EXPENSE em "actions".
+    PROIBIDO: escrever "tarefa registrada" ou "lembrete criado" sem action TASK em "actions".
+    Se o dado já existia no contexto, registre-o igualmente — o sistema lida com duplicatas automaticamente.`;
 
     // ─── Chamada IA ────────────────────────────────────────────────────────────
 
@@ -464,6 +470,75 @@ R7. ACTIONS VAZIAS: Se for só conversa (ex: "oi", "tudo bem?"), retorne "action
         if (delType) {
           console.warn(`[${remoteJid}] ⚠️ Safeguard: confirmação de delete sem action. Injetando DELETE ${delType}.`);
           aiResponse.actions.push({ action: "DELETE", parsedData: { type: delType, target: null } });
+        }
+      }
+    }
+
+    // Safeguard: IA confirmou receita sem gerar INCOME action
+    {
+      const incomeConfirmPatterns = [
+        /receita.{0,50}registrada/i,
+        /registr[aeo][id]?.{0,20}receita/i,
+        /R\$\s*[\d,.]+.{0,50}registrada/i,
+        /entrada.{0,50}registrada/i,
+      ];
+      const hasIncomeAct = aiResponse.actions.some(a => a?.action === "INCOME");
+      if (!hasIncomeAct && incomeConfirmPatterns.some(p => p.test(aiResponse.reply || ""))) {
+        const amountMatch = msgText.match(/\b(\d+[\.,]?\d*)\b/);
+        const amount = amountMatch ? parseFloat(amountMatch[1].replace(',', '.')) : 0;
+        if (amount > 0) {
+          const descMatch = msgText.match(/\bde\s+([^\d][a-zA-ZÀ-ú\s]+?)(?:\s*$|\s+(?:hoje|amanhã|às|no\b|na\b))/i);
+          const description = descMatch ? descMatch[1].trim() : "Receita";
+          console.warn(`[${remoteJid}] ⚠️ Safeguard INCOME: confirmação sem action. Injetando INCOME R$${amount} — ${description}.`);
+          aiResponse.actions.push({ action: "INCOME", parsedData: { amount, description, category: "Renda", date: null } });
+        }
+      }
+    }
+
+    // Safeguard: IA confirmou gasto sem gerar EXPENSE action
+    {
+      const expenseConfirmPatterns = [
+        /gasto.{0,50}registrado/i,
+        /despesa.{0,50}registrada/i,
+        /registr[aeo][id]?.{0,20}gasto/i,
+      ];
+      const hasExpenseAct = aiResponse.actions.some(a => a?.action === "EXPENSE");
+      if (!hasExpenseAct && expenseConfirmPatterns.some(p => p.test(aiResponse.reply || ""))) {
+        const amountMatch = msgText.match(/\b(\d+[\.,]?\d*)\b/);
+        const amount = amountMatch ? parseFloat(amountMatch[1].replace(',', '.')) : 0;
+        if (amount > 0) {
+          const descMatch = msgText.match(/\bno?\s+([a-zA-ZÀ-ú\s]+?)(?:\s*$|\s+(?:hoje|amanhã|às))/i)
+            || msgText.match(/\bde\s+([^\d][a-zA-ZÀ-ú\s]+?)(?:\s*$|\s+(?:hoje|amanhã|às))/i);
+          const description = descMatch ? descMatch[1].trim() : "Gasto";
+          console.warn(`[${remoteJid}] ⚠️ Safeguard EXPENSE: confirmação sem action. Injetando EXPENSE R$${amount} — ${description}.`);
+          aiResponse.actions.push({ action: "EXPENSE", parsedData: { amount, description, category: "Outros", date: null } });
+        }
+      }
+    }
+
+    // Safeguard: IA confirmou tarefa sem gerar TASK action
+    {
+      const taskConfirmPatterns = [
+        /tarefa\s+(registrada|criada|adicionada)/i,
+        /lembrete\s+(criado|registrado|configurado|adicionado)/i,
+        /agendado\s+(com\s+sucesso|para)/i,
+      ];
+      const hasTaskAct = aiResponse.actions.some(a => a?.action === "TASK");
+      if (!hasTaskAct && taskConfirmPatterns.some(p => p.test(aiResponse.reply || ""))) {
+        // Extrai título do reply da IA ("Tarefa registrada: X")
+        const titleFromReply = (aiResponse.reply || "").match(/(?:Tarefa|Lembrete)\s+(?:registrada?|criado?):\s*(.+?)(?:\n|$)/i);
+        const title = titleFromReply ? titleFromReply[1].trim() : null;
+        if (title) {
+          // Tenta extrair horário da mensagem do usuário
+          const timeMatch = msgText.match(/\bàs?\s*(\d{1,2})[h:]\s*(\d{0,2})/i);
+          let dueDate = null;
+          if (timeMatch) {
+            const d = new Date();
+            d.setHours(parseInt(timeMatch[1], 10), parseInt(timeMatch[2] || '0', 10), 0, 0);
+            dueDate = d.toISOString().replace('Z', '');
+          }
+          console.warn(`[${remoteJid}] ⚠️ Safeguard TASK: confirmação sem action. Injetando TASK "${title}".`);
+          aiResponse.actions.push({ action: "TASK", parsedData: { title, due_date: dueDate, remind: dueDate !== null } });
         }
       }
     }
