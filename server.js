@@ -1044,6 +1044,7 @@ const server = http.createServer(async (req, res) => {
 
         console.log(`[STRIPE] Evento: ${ev.type}`);
 
+        // ── Ativa conta ao cadastrar cartão (início do trial ou pagamento) ──────
         if (ev.type === 'checkout.session.completed') {
           const session = ev.data.object;
           let phone = session.client_reference_id || session.metadata?.whatsapp || session.customer_details?.phone;
@@ -1073,6 +1074,43 @@ const server = http.createServer(async (req, res) => {
               "Acesso confirmado! ✅\n\nSou seu Assessor Nico e já estou pronto para te ajudar com finanças e tarefas. 📈\n\nComeça mandando: \"gastei 50 no mercado\" ou \"me lembra de treinar às 18h\".",
               inst
             );
+          }
+        }
+
+        // ── Bloqueia conta se pagamento falhar após o trial ──────────────────
+        if (ev.type === 'invoice.payment_failed' || ev.type === 'customer.subscription.deleted') {
+          const obj = ev.data.object;
+          const customerId = obj.customer;
+
+          if (customerId) {
+            const customer = await stripe.customers.retrieve(customerId);
+            const rawPhone = customer.phone || customer.metadata?.whatsapp;
+
+            if (rawPhone) {
+              let cleanPhone = rawPhone.replace(/[^\d]/g, '');
+              if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith("55")) {
+                cleanPhone = `55${cleanPhone}`;
+              }
+              if (!cleanPhone.includes("@s.whatsapp.net")) cleanPhone = `${cleanPhone}@s.whatsapp.net`;
+
+              const cNo9 = cleanPhone.replace(/^55(\d{2})9/, '55$1');
+              const cWith9 = cleanPhone.replace(/^55(\d{2})(\d{8})@/, '55$19$2@');
+
+              const user = await prisma.user.findFirst({
+                where: { OR: [{ phone_number: cleanPhone }, { phone_number: cNo9 }, { phone_number: cWith9 }] }
+              });
+
+              if (user) {
+                await prisma.user.update({ where: { id: user.id }, data: { status: 'INACTIVE' } });
+                console.log(`[STRIPE] 🔒 Acesso bloqueado: ${cleanPhone} (${ev.type})`);
+
+                const inst = process.env.INSTANCE || "main";
+                const msg = ev.type === 'invoice.payment_failed'
+                  ? "Seu acesso ao Nico foi suspenso por falha no pagamento. Para reativar, atualize seu método de pagamento: https://www.nicoassessor.com/"
+                  : "Sua assinatura foi cancelada e o acesso foi encerrado. Para voltar a usar o Nico: https://www.nicoassessor.com/";
+                await sendText(cleanPhone, msg, inst);
+              }
+            }
           }
         }
 
