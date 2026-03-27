@@ -853,21 +853,8 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
 
         // ── SUBSCRIBE ────────────────────────────────────────────────────────
         else if (action === "SUBSCRIBE") {
-          try {
-            const session = await stripe.checkout.sessions.create({
-              payment_method_types: ['card'],
-              line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
-              mode: 'subscription',
-              client_reference_id: remoteJid,
-              phone_number_collection: { enabled: true },
-              success_url: `${APP_URL}/success.html`,
-              cancel_url: `${APP_URL}/cancel.html`,
-            });
-            aiResponse.reply += `\n\n🔗 Ative sua assinatura aqui: ${session.url}`;
-            hasChange = true;
-          } catch (stripeErr) {
-            console.error(`[${remoteJid}] ❌ Stripe:`, stripeErr.message);
-          }
+          aiResponse.reply += `\n\n🔗 Ative sua assinatura aqui (30 dias grátis): https://buy.stripe.com/eVqbJ2093bWJ6NH9kbf3a00`;
+          hasChange = true;
         }
 
         else {
@@ -1020,24 +1007,10 @@ const server = http.createServer(async (req, res) => {
     return res.end("Nico is alive! 🚀");
   }
 
-  // ── Criar Checkout com Trial de 30 dias ────────────────────────────────────
+  // ── Assinar (30 dias grátis) ───────────────────────────────────────────────
   if (req.method === 'GET' && cleanUrl === '/assinar') {
-    try {
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ['card'],
-        line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
-        mode: 'subscription',
-        subscription_data: { trial_period_days: 30 },
-        phone_number_collection: { enabled: true },
-        success_url: `${APP_URL}`,
-        cancel_url: `${APP_URL}`,
-      });
-      res.writeHead(302, { Location: session.url });
-      return res.end();
-    } catch (err) {
-      console.error("[CHECKOUT] Erro ao criar sessão:", err.message);
-      res.writeHead(500); return res.end("Erro ao criar checkout.");
-    }
+    res.writeHead(302, { Location: 'https://buy.stripe.com/eVqbJ2093bWJ6NH9kbf3a00' });
+    return res.end();
   }
 
   // ── Webhook Stripe ─────────────────────────────────────────────────────────
