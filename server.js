@@ -1091,7 +1091,7 @@ const server = http.createServer(async (req, res) => {
 
             const inst = process.env.INSTANCE || "main";
             await sendText(cleanPhone,
-              "Acesso confirmado! ✅\n\nSou seu Assessor Nico e já estou pronto para te ajudar com finanças e tarefas. 📈\n\nComeça mandando: \"gastei 50 no mercado\" ou \"me lembra de treinar às 18h\".",
+              "Acesso confirmado! ✅\n\nSou o Nico, seu Assessor Financeiro Pessoal. Estou pronto para te ajudar com finanças, tarefas e muito mais. 📈\n\n🎁 Seu período de teste gratuito de 30 dias começou agora. Você só será cobrado após esse período — e pode cancelar quando quiser antes disso.\n\nComece mandando:\n- \"gastei 50 no mercado\"\n- \"me lembra de treinar às 18h\"\n- \"qual meu saldo do mês?\"",
               inst
             );
           }
