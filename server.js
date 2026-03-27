@@ -1020,6 +1020,26 @@ const server = http.createServer(async (req, res) => {
     return res.end("Nico is alive! 🚀");
   }
 
+  // ── Criar Checkout com Trial de 30 dias ────────────────────────────────────
+  if (req.method === 'GET' && cleanUrl === '/assinar') {
+    try {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
+        mode: 'subscription',
+        subscription_data: { trial_period_days: 30 },
+        phone_number_collection: { enabled: true },
+        success_url: `${APP_URL}`,
+        cancel_url: `${APP_URL}`,
+      });
+      res.writeHead(302, { Location: session.url });
+      return res.end();
+    } catch (err) {
+      console.error("[CHECKOUT] Erro ao criar sessão:", err.message);
+      res.writeHead(500); return res.end("Erro ao criar checkout.");
+    }
+  }
+
   // ── Webhook Stripe ─────────────────────────────────────────────────────────
   if (req.method === 'POST' && cleanUrl === '/webhook/stripe') {
     const chunks = [];

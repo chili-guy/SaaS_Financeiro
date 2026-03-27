@@ -140,7 +140,7 @@ function LandingPage() {
             <a onClick={() => setIsMenuOpen(false)} className="text-xl text-[#111827] hover:text-[#7C3AED]" href="#avaliacoes">Avaliações</a>
             <a onClick={() => setIsMenuOpen(false)} className="text-xl text-[#111827] hover:text-[#7C3AED]" href="#planos">Planos</a>
             <hr className="border-[#F1F5F9]" />
-            <a href="https://buy.stripe.com/test_cNi00k1fGeeg3gK0Sh93y01" className="bg-[#7C3AED] text-white py-4 rounded-full text-lg shadow-lg shadow-[#7C3AED]/20">Assinar Plano</a>
+            <a href="https://fin-agent-fin-bot.npchia.easypanel.host/assinar" className="bg-[#7C3AED] text-white py-4 rounded-full text-lg shadow-lg shadow-[#7C3AED]/20">Assinar Plano</a>
           </div>
         </div>
       </nav>
@@ -178,7 +178,7 @@ function LandingPage() {
           </div>
 
           <div className="flex flex-col items-center gap-6">
-            <a href="https://buy.stripe.com/test_cNi00k1fGeeg3gK0Sh93y01" className="group relative">
+            <a href="https://fin-agent-fin-bot.npchia.easypanel.host/assinar" className="group relative">
               {/* Glow effect */}
               <div className="absolute -inset-1 bg-gradient-to-r from-[#7C3AED] to-[#9F67FF] rounded-full blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
 
@@ -534,7 +534,7 @@ function LandingPage() {
                 </ul>
 
                 <div className="w-full">
-                  <a href="https://buy.stripe.com/test_cNi00k1fGeeg3gK0Sh93y01" className="block w-full bg-[#22c55e] text-white text-center font-headline font-bold text-[1.1rem] py-5 rounded-full hover:bg-[#16a34a] transition-all duration-300 shadow-[0_15px_30px_rgba(34,197,94,0.3)] mb-4">
+                  <a href="https://fin-agent-fin-bot.npchia.easypanel.host/assinar" className="block w-full bg-[#22c55e] text-white text-center font-headline font-bold text-[1.1rem] py-5 rounded-full hover:bg-[#16a34a] transition-all duration-300 shadow-[0_15px_30px_rgba(34,197,94,0.3)] mb-4">
                     CONTRATAR AGORA
                   </a>
 
@@ -664,7 +664,7 @@ function LandingPage() {
 
                 {/* CTA Action - Centered and Enlarged */}
                 <div className="flex flex-col items-center gap-6 mb-16 w-full max-w-md">
-                  <a href="https://buy.stripe.com/test_cNi00k1fGeeg3gK0Sh93y01" className="group/btn relative w-full">
+                  <a href="https://fin-agent-fin-bot.npchia.easypanel.host/assinar" className="group/btn relative w-full">
                     <div className="absolute -inset-2 bg-gradient-to-r from-[#7C3AED] to-[#9F67FF] rounded-full blur-xl opacity-20 group-hover/btn:opacity-60 transition duration-500 group-hover/btn:duration-200"></div>
 
                     <div className="relative flex items-center justify-center gap-4 bg-[#7C3AED] text-white font-headline font-black text-xl px-16 py-8 md:py-9 rounded-full shadow-[0_20px_40px_rgba(124,58,237,0.3)] transition-all duration-300 transform group-hover/btn:scale-[1.03] group-hover/btn:shadow-[0_25px_50px_rgba(124,58,237,0.4)] active:scale-95 tracking-widest uppercase">
