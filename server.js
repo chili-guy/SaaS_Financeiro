@@ -562,9 +562,17 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
       ];
       const hasTaskAct = aiResponse.actions.some(a => a?.action === "TASK");
       if (!hasTaskAct && taskConfirmPatterns.some(p => p.test(aiResponse.reply || ""))) {
-        // Extrai título do reply da IA ("Tarefa registrada: X")
+        // Extrai título do reply da IA ("Tarefa registrada: X") ou da mensagem do usuário como fallback
         const titleFromReply = (aiResponse.reply || "").match(/(?:Tarefa|Lembrete)\s+(?:registrada?|criado?):\s*(.+?)(?:\n|$)/i);
-        const title = titleFromReply ? titleFromReply[1].trim() : null;
+        let title = titleFromReply ? titleFromReply[1].trim() : null;
+        if (!title) {
+          // Fallback: remove horário e palavras de comando da mensagem do usuário para extrair o título
+          title = msgText
+            .replace(/\b(\d{1,2})[h:](\d{2})\b/gi, '')
+            .replace(/\bàs?\s*\d{1,2}[h:]\d{0,2}\b/gi, '')
+            .replace(/\b(hoje|hj|amanhã|lembrar|lembra|lembrete|adiciona|registra|anota|cria|me avisa?)\b/gi, '')
+            .replace(/\s{2,}/g, ' ').trim();
+        }
         if (title) {
           // Tenta extrair horário da mensagem do usuário (ex: "às 17h", "15h", "de 15h às 17h")
           const timeMatch = msgText.match(/\bàs?\s*(\d{1,2})[h:]\s*(\d{0,2})/i)
@@ -856,13 +864,12 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
 
           if (task) {
             await prisma.task.update({ where: { id: task.id }, data: { completed: true } });
-            aiResponse.reply = (aiResponse.reply ? aiResponse.reply + "\n\n" : "") +
-              `✅ Tarefa concluída!\n\n📝 "${task.title}"\n🏆 Status: Finalizada`;
+            // Sempre sobrescreve — evita duplicação com o reply da IA
+            aiResponse.reply = `✅ Tarefa concluída!\n📝 "${task.title}"\n🏆 Status: Finalizada`;
             hasChange = true;
           } else {
             console.log(`[${remoteJid}] ⚠️ Tarefa para DONE não encontrada: "${taskName}"`);
-            aiResponse.reply = (aiResponse.reply ? aiResponse.reply + "\n\n" : "") +
-              `Não encontrei nenhuma tarefa pendente com esse nome. Deseja ver sua agenda completa?`;
+            aiResponse.reply = `Não encontrei nenhuma tarefa pendente com esse nome. Deseja ver sua agenda completa?`;
           }
         }
 
