@@ -849,7 +849,7 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
 
           // Override contextual: "e dessa semana?" / "e na sexta?" é follow-up — herda tipo da última consulta
           if (queryType === "SUMMARY") {
-            const isFollowUp = /^(e\b|e\s+(a[aio]?|o|essa?|nessa?|esta?|neste?|desse?|deste?|do|da|no|na|na\s+sexta|na\s+segunda)\b)/i.test(msgLowerQ);
+            const isFollowUp = /^(e\b|e\s+(a[aio]?|o|essa?|nessa?|esta?|neste?|desse?|deste?|do|da|no|na|na\s+sexta|na\s+segunda|anteontem|ontem|amanhã)\b)/i.test(msgLowerQ);
             if (isFollowUp) {
               const lastBotQuery = memory
                 .filter(m => m.role === "assistant")
@@ -863,6 +863,10 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
               }
             }
           }
+
+          // Sincroniza parsedData.type com o queryType final (após overrides)
+          // — garante que replyToSave salve o tipo correto ("Mostrei os dados: EXPENSES", não "SUMMARY")
+          parsedData.type = queryType;
 
           // Resolução de período
           let dateFilter = { gte: firstDayMonth };
@@ -893,21 +897,31 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
           }
 
           // Fallback semântico de período — se IA não enviou date mas mensagem tem indicador temporal
-          if (!parsedData.date && queryType !== "SUMMARY" && queryType !== "TASKS") {
+          if (!parsedData.date && queryType !== "SUMMARY") {
             const t = new Date();
             if (/\b(hoje|hj)\b/i.test(msgText)) {
               dateFilter = {
                 gte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 0, 0, 0),
                 lte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59)
               };
+            } else if (/\bontem\b/i.test(msgText)) {
+              const y = new Date(t); y.setDate(t.getDate() - 1);
+              dateFilter = {
+                gte: new Date(y.getFullYear(), y.getMonth(), y.getDate(), 0, 0, 0),
+                lte: new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59)
+              };
+            } else if (/\banteontem\b/i.test(msgText)) {
+              const y = new Date(t); y.setDate(t.getDate() - 2);
+              dateFilter = {
+                gte: new Date(y.getFullYear(), y.getMonth(), y.getDate(), 0, 0, 0),
+                lte: new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59)
+              };
             } else if (/\b(essa|esta|nessa|nesta|dessa|desta)\s+semana\b/i.test(msgText)) {
-              // Semana atual: segunda a domingo (padrão BR)
-              const dow = t.getDay(); // 0=Dom, 1=Seg...
+              const dow = t.getDay();
               const daysFromMon = dow === 0 ? 6 : dow - 1;
               const mon = new Date(t); mon.setDate(t.getDate() - daysFromMon); mon.setHours(0, 0, 0, 0);
               const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23, 59, 59, 999);
               dateFilter = { gte: mon, lte: sun };
-              console.log(`[${remoteJid}] 📅 Fallback semana: ${mon.toLocaleDateString("pt-BR")} → ${sun.toLocaleDateString("pt-BR")}`);
             } else if (/\b(semana\s+passada|última\s+semana)\b/i.test(msgText)) {
               const dow = t.getDay();
               const daysFromMon = dow === 0 ? 6 : dow - 1;
