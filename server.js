@@ -823,6 +823,22 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
             else if (/\b(recebi|receita|entrou|entrad[ao]|salário|renda|quanto\s+recebi)\b/.test(msgLowerQ)) queryType = "INCOMES";
           }
 
+          // Override contextual: "e dessa semana?" é follow-up — herda tipo da última consulta
+          if (queryType === "SUMMARY") {
+            const isFollowUp = /^(e\b|e\s+(a[aio]?|o|essa?|nessa?|esta?|neste?|desse?|deste?|do|da|no|na)\b)/i.test(msgLowerQ);
+            if (isFollowUp) {
+              const lastBotQuery = memory
+                .filter(m => m.role === "assistant")
+                .slice(-5)
+                .map(m => m.content)
+                .find(c => /mostrei os dados:/i.test(c));
+              if (lastBotQuery) {
+                if (/EXPENSES/i.test(lastBotQuery)) { queryType = "EXPENSES"; console.log(`[${remoteJid}] 🔄 Context inherit: EXPENSES`); }
+                else if (/INCOMES/i.test(lastBotQuery)) { queryType = "INCOMES"; console.log(`[${remoteJid}] 🔄 Context inherit: INCOMES`); }
+              }
+            }
+          }
+
           // Resolução de período
           let dateFilter = { gte: firstDayMonth };
           if (parsedData.date) {
@@ -851,14 +867,29 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
             }
           }
 
-          // Fallback semântico: se mensagem menciona "hoje/hj" e query é EXPENSES/INCOMES, filtra por hoje
+          // Fallback semântico de período — se IA não enviou date mas mensagem tem indicador temporal
           if (!parsedData.date && queryType !== "SUMMARY" && queryType !== "TASKS") {
+            const t = new Date();
             if (/\b(hoje|hj)\b/i.test(msgText)) {
-              const t = new Date();
               dateFilter = {
                 gte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 0, 0, 0),
                 lte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59)
               };
+            } else if (/\b(essa|esta|nessa|nesta|dessa|desta)\s+semana\b/i.test(msgText)) {
+              // Semana atual: segunda a domingo (padrão BR)
+              const dow = t.getDay(); // 0=Dom, 1=Seg...
+              const daysFromMon = dow === 0 ? 6 : dow - 1;
+              const mon = new Date(t); mon.setDate(t.getDate() - daysFromMon); mon.setHours(0, 0, 0, 0);
+              const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23, 59, 59, 999);
+              dateFilter = { gte: mon, lte: sun };
+              console.log(`[${remoteJid}] 📅 Fallback semana: ${mon.toLocaleDateString("pt-BR")} → ${sun.toLocaleDateString("pt-BR")}`);
+            } else if (/\b(semana\s+passada|última\s+semana)\b/i.test(msgText)) {
+              const dow = t.getDay();
+              const daysFromMon = dow === 0 ? 6 : dow - 1;
+              const thisMon = new Date(t); thisMon.setDate(t.getDate() - daysFromMon);
+              const lastMon = new Date(thisMon); lastMon.setDate(thisMon.getDate() - 7); lastMon.setHours(0, 0, 0, 0);
+              const lastSun = new Date(lastMon); lastSun.setDate(lastMon.getDate() + 6); lastSun.setHours(23, 59, 59, 999);
+              dateFilter = { gte: lastMon, lte: lastSun };
             }
           }
 
