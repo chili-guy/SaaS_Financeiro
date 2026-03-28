@@ -325,6 +325,11 @@ independente do vocabulário que usar.
 
 === REGRAS CRÍTICAS ===
 
+R0. PERGUNTAS RETÓRICAS / NEGAÇÕES nunca geram TASK:
+    "não fiz nada hoje?" / "não tenho nada?" / "não tem nada pra fazer?" / "o que eu fiz?"
+    Essas são perguntas — responda com texto, nunca crie uma tarefa.
+    TASK só é criado quando o usuário AFIRMA que quer registrar algo: "cinema amanhã 20h", "dentista sexta".
+
 R1. MÚLTIPLOS PEDIDOS: Se o usuário mandar vários pedidos numa mensagem, gere uma action para cada um.
     Exemplo: "gastei 20 na farmácia e 50 no mercado" → duas actions EXPENSE.
 
@@ -755,6 +760,19 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
           const title = cleanTitle(parsedData.title || "");
           if (!title) { console.warn(`[${remoteJid}] ⚠️ TASK ignorada: título vazio`); continue; }
 
+          // Rejeita títulos que são claramente perguntas retóricas ou negações
+          // Ex: "não fiz nada", "nada hoje", "nenhuma tarefa", "não tenho nada"
+          const invalidTitlePatterns = [
+            /^(não|nao)\b/i,                     // começa com negação
+            /\b(nada|nenhum[ao]?)\b/i,            // contém "nada" ou "nenhum"
+            /\b(o\s+que\s+(eu\s+)?(fiz|tenho|tem))\b/i,  // "o que eu fiz/tenho"
+            /\?$/,                                // título termina com "?"
+          ];
+          if (invalidTitlePatterns.some(p => p.test(title))) {
+            console.warn(`[${remoteJid}] ⚠️ TASK rejeitada: título parece pergunta/negação "${title}"`);
+            continue;
+          }
+
           let dueDate = parsedData.due_date ? new Date(String(parsedData.due_date).replace(/Z$/i, "")) : null;
 
           // Fallback: se IA não enviou due_date mas a mensagem contém horário, extrai diretamente
@@ -918,7 +936,13 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
               }).join("\n\n");
               queryResult += `\n\n━━━━━━━━━━━━━━━━━━\nTotal: ${list.length} tarefa(s) pendente(s)`;
             } else {
-              queryResult = "Sua agenda está limpa! Nenhuma tarefa pendente. 🎉";
+              // Se a pergunta era "o que eu fiz", o usuário quer histórico — sugere extrato
+              const askingPast = /\b(fiz|fiz\s+hj|o\s+que\s+eu\s+fiz|atividades\s+de\s+hj)\b/i.test(msgText);
+              if (askingPast) {
+                queryResult = "Nenhuma tarefa pendente no momento.\n\nSe quiser ver o que movimentou hoje financeiramente, é só perguntar \"quanto gastei hj?\" ou \"meu resumo de hoje\". 📊";
+              } else {
+                queryResult = "Sua agenda está limpa! Nenhuma tarefa pendente. 🎉";
+              }
             }
 
           } else if (queryType === "EXPENSES") {
