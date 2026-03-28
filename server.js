@@ -610,10 +610,11 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
     // — sem depender de vocabulário específico do usuário
     {
       // Sinais na mensagem do usuário (amplos — vocabulário variado)
+      // NOTA: "fiz" sozinho foi removido — muito ambíguo ("fiz compras" = EXPENSE, não DONE)
       const userDonePatterns = [
         /\b(conclu[íi]|terminei|finalizei|realizei|executei|cumpri|completei)\b/i,
-        /\b(fiz|fiz\s+tudo|já\s+fiz|já\s+fiz\s+tudo)\b/i,
-        /\b(feito|pronto|ok|done|check|✓|✅)\b/i,
+        /\b(fiz\s+tudo|já\s+fiz|já\s+fiz\s+tudo)\b/i,
+        /\b(feito|pronto|done|check|✓|✅)\b/i,   // "ok" removido — muito ambíguo
         /foram\s+(conclu[íi]das?|feitas?|finalizadas?|realizadas?|prontas?)/i,
         /\b(tod[ao]s?|as\s+duas?|os\s+dois?|ambas?|tud[oa])\b.{0,20}\b(feit[ao]s?|conclu[íi]d[ao]s?|finalizad[ao]s?|pronto|resolvid[ao]s?)\b/i,
         /\b(tudo\s+)?(resolvido|executado|cumprido|missão\s+cumprida|pode\s+tirar|pode\s+apagar)\b/i,
@@ -632,7 +633,13 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
       const userSignal = userDonePatterns.some(p => p.test(msgText));
       const aiSignal = aiDoneReplyPatterns.some(p => p.test(aiResponse.reply || ""));
 
-      if (!hasDoneAct && (userSignal || aiSignal) && pendingTasks.length > 0) {
+      // Guarda: se a IA retornou EXPENSE/INCOME E mensagem tem valor monetário,
+      // é quase certo que "fiz/feito" refere-se ao registro financeiro, não a uma tarefa
+      const hasFinanceAct = aiResponse.actions.some(a => a?.action === "EXPENSE" || a?.action === "INCOME");
+      const hasMoney = /\b\d+[,.]?\d*\s*(reais|real)?\b/i.test(msgText) && /\b(r\$|reais|real|paguei|gastei|comprei|custou|saiu|debitou|foi)\b/i.test(msgText);
+      const isLikelyFinance = hasFinanceAct && hasMoney;
+
+      if (!hasDoneAct && (userSignal || aiSignal) && pendingTasks.length > 0 && !isLikelyFinance) {
         const msgLower = msgText.toLowerCase();
         const replyLower = (aiResponse.reply || "").toLowerCase();
 
@@ -695,7 +702,8 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
     });
 
     let hasChange = false;
-    const taskReplies = []; // acumula confirmações de múltiplas tarefas
+    const taskReplies = [];    // acumula confirmações de múltiplas tarefas
+    const financeReplies = []; // acumula confirmações de múltiplas transações financeiras
 
     for (const act of uniqueActs) {
       const { action, parsedData = {} } = act;
@@ -706,15 +714,16 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
         if (action === "EXPENSE") {
           const val = parseFloat(String(parsedData.amount || 0).replace(',', '.').replace(/[^\d.]/g, ''));
           if (val > 0) {
+            const expDate = parsedData.date
+              ? (() => { const s = String(parsedData.date).replace(/Z$/i, ""); return new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s); })()
+              : new Date();
+            const expDesc = parsedData.description || "Gasto";
+            const expCat  = parsedData.category  || "Outros";
             await prisma.expense.create({
-              data: {
-                user_id: user.id,
-                amount: val,
-                description: parsedData.description || "Gasto",
-                category: parsedData.category || "Outros",
-                date: parsedData.date ? (() => { const s = String(parsedData.date).replace(/Z$/i, ""); return new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s); })() : new Date()
-              }
+              data: { user_id: user.id, amount: val, description: expDesc, category: expCat, date: expDate }
             });
+            const dateStr = expDate.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric" });
+            financeReplies.push(`✅ Gasto registrado!\n📝 ${expDesc}\n💰 Valor: R$ ${val.toFixed(2).replace('.', ',')}\n📅 Data: ${dateStr}\n🏷️ Categoria: ${expCat}`);
             hasChange = true;
           } else {
             console.warn(`[${remoteJid}] ⚠️ EXPENSE ignorado: valor inválido (${parsedData.amount})`);
@@ -725,15 +734,16 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
         else if (action === "INCOME") {
           const val = parseFloat(String(parsedData.amount || 0).replace(',', '.').replace(/[^\d.]/g, ''));
           if (val > 0) {
+            const incDate = parsedData.date
+              ? (() => { const s = String(parsedData.date).replace(/Z$/i, ""); return new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s); })()
+              : new Date();
+            const incDesc = parsedData.description || "Receita";
+            const incCat  = parsedData.category  || "Renda";
             await prisma.income.create({
-              data: {
-                user_id: user.id,
-                amount: val,
-                description: parsedData.description || "Receita",
-                category: parsedData.category || "Renda",
-                date: parsedData.date ? (() => { const s = String(parsedData.date).replace(/Z$/i, ""); return new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s); })() : new Date()
-              }
+              data: { user_id: user.id, amount: val, description: incDesc, category: incCat, date: incDate }
             });
+            const dateStr = incDate.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric" });
+            financeReplies.push(`✅ Receita registrada!\n📝 ${incDesc}\n💰 Valor: R$ ${val.toFixed(2).replace('.', ',')}\n📅 Data: ${dateStr}\n🏷️ Categoria: ${incCat}`);
             hasChange = true;
           }
         }
@@ -1073,6 +1083,11 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
     // Aplica confirmações acumuladas de múltiplas tarefas
     if (taskReplies.length > 0) {
       aiResponse.reply = taskReplies.join("\n\n");
+    }
+
+    // Aplica confirmações acumuladas de transações financeiras (formato padronizado)
+    if (financeReplies.length > 0) {
+      aiResponse.reply = financeReplies.join("\n\n");
     }
 
     // ─── Resposta final ────────────────────────────────────────────────────────
