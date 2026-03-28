@@ -280,7 +280,9 @@ independente do vocabulário que usar.
    REGRA: "quanto gastei X" é SEMPRE EXPENSES. NUNCA use SUMMARY para perguntas de gastos.
 
    Agenda/Tarefas — exemplos: "minha agenda" / "o que tenho amanhã?" / "tem algum compromisso?"
-   (NÃO use TASKS para "hoje" quando a pergunta é sobre gastos)
+   "o que eu fiz hoje?" / "quais minhas atividades de hj?" / "minha lista de tarefas" / "o que tenho pra fazer?"
+   "tem algum afazer?" / "meus compromissos" / "o que fiz essa semana?"
+   (NÃO use TASKS para "hoje" quando a pergunta é sobre gastos — se tiver valor monetário, é EXPENSES)
    → { "actions": [{ "action": "QUERY", "parsedData": { "type": "TASKS", "date": null } }], "reply": "Aqui está sua agenda:" }
 
    Resumo/Saldo geral — USE SUMMARY apenas para visão financeira completa (receitas + gastos + saldo):
@@ -816,11 +818,15 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
         else if (action === "QUERY") {
           let queryType = (parsedData.type || "SUMMARY").toUpperCase();
 
-          // Override semântico: se IA retornou SUMMARY mas mensagem é claramente sobre gastos ou receitas
+          // Override semântico: se IA retornou SUMMARY mas mensagem é claramente sobre gastos, receitas ou agenda
           const msgLowerQ = msgText.toLowerCase();
           if (queryType === "SUMMARY") {
-            if (/\b(gastei|gasto|despesa|extrato|saiu|paguei|quanto\s+gast)\b/.test(msgLowerQ))  queryType = "EXPENSES";
-            else if (/\b(recebi|receita|entrou|entrad[ao]|salário|renda|quanto\s+recebi)\b/.test(msgLowerQ)) queryType = "INCOMES";
+            if (/\b(gastei|gasto|despesa|extrato|saiu|paguei|quanto\s+gast)\b/.test(msgLowerQ))
+              queryType = "EXPENSES";
+            else if (/\b(recebi|receita|entrou|entrad[ao]|salário|renda|quanto\s+recebi)\b/.test(msgLowerQ))
+              queryType = "INCOMES";
+            else if (/\b(agenda|tarefas?|atividades?|compromissos?|afazeres?|o\s+que\s+(eu\s+)?(fiz|tenho|tem)|minha\s+lista)\b/.test(msgLowerQ))
+              queryType = "TASKS";
           }
 
           // Override contextual: "e dessa semana?" é follow-up — herda tipo da última consulta
