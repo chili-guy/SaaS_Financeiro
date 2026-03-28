@@ -231,71 +231,80 @@ Retorne APENAS um JSON válido, sem texto fora dele, sem blocos de código. Estr
 
 === TIPOS DE AÇÃO ===
 
+REGRA FUNDAMENTAL: Interprete a INTENÇÃO do usuário, não palavras exatas.
+Cada pessoa se expressa de forma diferente — sua função é entender o que a pessoa quer fazer,
+independente do vocabulário que usar.
+
 1. REGISTRAR GASTO/DÍVIDA/CONTA → action "EXPENSE"
-   Gatilhos: "gastei", "paguei", "comprei", "saiu", "dívida", "conta de"
-   Exemplo input: "gastei 45 no uber"
+   INTENÇÃO: usuário informa que gastou, pagou, comprou, deve ou saiu dinheiro da sua vida financeira.
+   Exemplos de vocabulário variado:
+   "gastei 45 no uber" / "paguei 45 no uber" / "saíram 45 com transporte" / "uber me custou 45"
+   "fui no mercado, 120 reais" / "conta de luz veio 80" / "debitou 200 do cartão" / "devo 500 no cartão"
    → { "action": "EXPENSE", "parsedData": { "amount": 45.00, "description": "Uber", "category": "Transporte", "date": null } }
 
 2. REGISTRAR RECEITA/ENTRADA → action "INCOME"
-   Gatilhos: "recebi", "entrou", "salário", "vendi", "renda"
-   Exemplo input: "recebi 3000 de salário"
+   INTENÇÃO: usuário informa que recebeu, entrou dinheiro, obteve renda ou valor positivo.
+   Exemplos de vocabulário variado:
+   "recebi 3000 de salário" / "caiu o salário, 3000" / "entrou 3k hoje" / "vendi meu notebook por 1500"
+   "me pagaram 500 de freela" / "chegou 200 de dividendos" / "ganhei 400 com serviço"
    → { "action": "INCOME", "parsedData": { "amount": 3000.00, "description": "Salário", "category": "Salário", "date": null } }
 
 3. CRIAR TAREFA/LEMBRETE → action "TASK"
-   Gatilhos: "lembrar", "me avise", "agendar", "reunião", "compromisso", "não esquecer"
+   INTENÇÃO: usuário quer que algo seja lembrado, agendado ou registrado para fazer depois.
    Para lembrete com horário: "remind": true. Sem horário: "remind": false.
-   Exemplo input: "me lembra de pagar o aluguel amanhã às 9h"
+   Exemplos de vocabulário variado:
+   "me lembra de pagar o aluguel amanhã às 9h" / "adiciona reunião na sexta às 14h"
+   "põe na agenda: academia às 7h" / "não me deixa esquecer da consulta segunda"
+   "anota que tenho dentista dia 5 às 10h" / "cria um lembrete pra ligar pra fulano amanhã"
+   "compromisso com cliente hoje às 15h" / "study session de 15h às 17h"
    → { "action": "TASK", "parsedData": { "title": "Pagar aluguel", "due_date": "2025-01-15T09:00:00", "remind": true } }
 
 4. CONSULTAR DADOS → action "QUERY"
-   Gatilhos: "mostrar", "listar", "ver", "quais são", "quanto gastei", "extrato", "relatório", "meus gastos", "minha agenda", "resumo", "saldo", "tarefas", "compromissos", "o que tenho", "o que está", "meu dia", "hoje", "amanhã", "essa semana", "tenho algo", "tem algo", "algum compromisso", "alguma tarefa"
-   IMPORTANTE: Você DEVE usar QUERY para qualquer pedido de visualização. Nunca escreva listas no campo "reply".
+   INTENÇÃO: usuário quer visualizar, ver, listar ou entender seus dados financeiros ou agenda.
+   IMPORTANTE: Use QUERY para qualquer pedido de visualização. Nunca escreva listas no "reply".
    Tipos disponíveis: "TASKS", "EXPENSES", "INCOMES", "SUMMARY"
 
-   Exemplo input: "quero ver os meus gastos" / "liste minhas despesas" / "quanto gastei?"
+   Gastos/Despesas — exemplos: "quero ver os meus gastos" / "quanto saiu esse mês" / "o que gastei?"
    → { "actions": [{ "action": "QUERY", "parsedData": { "type": "EXPENSES", "date": null } }], "reply": "Aqui estão seus gastos:" }
 
-   Exemplo input: "minha agenda" / "tenho algum compromisso?" / "o que tenho pra amanhã?" / "o que tenho hoje?"
+   Agenda/Tarefas — exemplos: "minha agenda" / "o que tenho hoje?" / "tem algo pra amanhã?" / "próximos compromissos"
    → { "actions": [{ "action": "QUERY", "parsedData": { "type": "TASKS", "date": null } }], "reply": "Aqui está sua agenda:" }
 
-   Exemplo input: "meu resumo" / "meu saldo" / "panorama"
+   Resumo/Saldo — exemplos: "como estou financeiramente?" / "me dá um panorama" / "situação geral"
    → { "actions": [{ "action": "QUERY", "parsedData": { "type": "SUMMARY", "date": null } }], "reply": "Aqui está seu resumo:" }
 
-   Exemplo input: "resumo detalhado" / "detalhado o resumo" / "detalhe meus gastos e receitas"
+   Detalhado — exemplos: "detalhe tudo" / "gastos e receitas completos"
    → { "actions": [{ "action": "QUERY", "parsedData": { "type": "EXPENSES", "date": null } }, { "action": "QUERY", "parsedData": { "type": "INCOMES", "date": null } }], "reply": "Aqui está o detalhamento:" }
 
-   Exemplo input: "minhas receitas de março"
+   Com período — exemplos: "minhas receitas de março"
    → { "actions": [{ "action": "QUERY", "parsedData": { "type": "INCOMES", "date": "2025-03" } }], "reply": "Aqui estão suas receitas de março:" }
 
 5. CONCLUIR TAREFA → action "DONE"
-   Gatilhos: "concluí", "terminei", "feito", "finalizado", "já fiz", "marcar como feito"
-   Exemplo input: "concluí a reunião"
+   INTENÇÃO: usuário indica que uma tarefa foi realizada, completada, finalizada — em qualquer forma verbal,
+   tempo, voz (ativa ou passiva), singular ou plural, formal ou informal.
+   Exemplos de vocabulário variado (1 tarefa):
+   "concluí a reunião" / "terminei a academia" / "já fiz o mercado" / "pronto, médico feito"
+   "missão cumprida: dentista" / "ok, liguei pra fulano" / "academia: check" / "resolvi o aluguel"
    → { "action": "DONE", "parsedData": { "title": "reunião" } }
+   Exemplos de vocabulário variado (TODAS as tarefas pendentes):
+   "as duas foram concluídas" / "fiz tudo" / "todas feitas" / "tudo resolvido" / "missão cumprida"
+   "já resolvi tudo isso" / "ok, todos feitos" / "pronto, tudo certo" / "feito, pode limpar"
+   → Gere uma action DONE para CADA tarefa listada em "Tarefas pendentes", usando o título exato de cada uma.
 
 6. APAGAR REGISTRO → action "DELETE"
-   Gatilhos: "apagar", "remover", "excluir", "deletar", "cancelar", "limpar", "limpe", "zerar"
-   REGRA: "target" deve ser o nome específico do item. Para delete-all de um tipo, use target: null.
-   type "ALL" APENAS para "apaga tudo", "zera tudo", "reset" — NUNCA para pedidos específicos de um tipo.
-   Exemplo input: "apaga o gasto do uber"
+   INTENÇÃO: usuário quer remover, apagar ou eliminar algum dado já registrado.
+   REGRA: "target" = nome específico do item. Para apagar todos de um tipo, use target: null.
+   type "ALL" somente para reset total — nunca para um tipo específico.
+   Exemplos: "apaga o gasto do uber" → target: "uber" | "limpe meus gastos" → type: EXPENSES, target: null
+   "tira aquela tarefa de academia" → type: TASKS, target: "academia" | "zera tudo" → type: ALL
    → { "action": "DELETE", "parsedData": { "type": "EXPENSES", "target": "uber" } }
-   Exemplo input: "limpe meus gastos" / "remova meus gastos" / "remova todos os gastos" / "delete meus gastos"
-   → { "action": "DELETE", "parsedData": { "type": "EXPENSES", "target": null } }
-   Exemplo input: "remova minhas receitas"
-   → { "action": "DELETE", "parsedData": { "type": "INCOMES", "target": null } }
-   Exemplo input: "apaga a tarefa de academia"
-   → { "action": "DELETE", "parsedData": { "type": "TASKS", "target": "academia" } }
-   Exemplo input: "apaga tudo" / "zera tudo" / "reset"
-   → { "action": "DELETE", "parsedData": { "type": "ALL", "target": null } }
 
 7. SILENCIAR ALARME → action "TOGGLE_ALARM"
-   Gatilhos: "desligar alarme", "silenciar lembrete", "parar de me avisar", "desative o lembrete"
-   REGRA: Se o usuário disser "desative o lembrete" sem especificar tarefa, verifique o histórico da conversa.
-   Se a última tarefa criada estiver no histórico (ex: "Tarefa registrada: Call com a Raquel"), use-a como alvo.
-   Só use target "todos" se o usuário pedir explicitamente ("todos os lembretes", "todas as tarefas").
-   Exemplo (tarefa recente no histórico): "desative o lembrete"
+   INTENÇÃO: usuário quer desativar, silenciar ou cancelar o lembrete de uma tarefa.
+   REGRA: Se sem tarefa específica, use o histórico para identificar a tarefa mais recente.
+   Só use target "todos" se o usuário pedir explicitamente para todas as tarefas.
+   Exemplos: "desativa o lembrete" / "para de me avisar disso" / "silencia esse alarme" / "cancela o aviso"
    → { "action": "TOGGLE_ALARM", "parsedData": { "target": "Call com a Raquel", "active": false } }
-   Exemplo (pedido genérico): "desative todos os lembretes"
-   → { "action": "TOGGLE_ALARM", "parsedData": { "target": "todos", "active": false } }
 
 === REGRAS CRÍTICAS ===
 
@@ -541,16 +550,66 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
         const titleFromReply = (aiResponse.reply || "").match(/(?:Tarefa|Lembrete)\s+(?:registrada?|criado?):\s*(.+?)(?:\n|$)/i);
         const title = titleFromReply ? titleFromReply[1].trim() : null;
         if (title) {
-          // Tenta extrair horário da mensagem do usuário
-          const timeMatch = msgText.match(/\bàs?\s*(\d{1,2})[h:]\s*(\d{0,2})/i);
+          // Tenta extrair horário da mensagem do usuário (ex: "às 17h", "15h", "de 15h às 17h")
+          const timeMatch = msgText.match(/\bàs?\s*(\d{1,2})[h:]\s*(\d{0,2})/i)
+                         || msgText.match(/\bde\s+(\d{1,2})[h:]\s*(\d{0,2})/i);
           let dueDate = null;
           if (timeMatch) {
             const d = new Date();
             d.setHours(parseInt(timeMatch[1], 10), parseInt(timeMatch[2] || '0', 10), 0, 0);
             dueDate = d.toISOString().replace('Z', '');
+            // Corrige o reply para incluir o horário claramente
+            const hh = String(parseInt(timeMatch[1])).padStart(2, '0');
+            const mm = String(parseInt(timeMatch[2] || '0')).padStart(2, '0');
+            aiResponse.reply = `✅ Tarefa registrada!\n📝 ${title}\n⏰ Horário: ${hh}:${mm}\n🔔 Lembrete ativo`;
           }
           console.warn(`[${remoteJid}] ⚠️ Safeguard TASK: confirmação sem action. Injetando TASK "${title}".`);
           aiResponse.actions.push({ action: "TASK", parsedData: { title, due_date: dueDate, remind: dueDate !== null } });
+        }
+      }
+    }
+
+    // Safeguard DONE: detecta conclusão por sinal do usuário OU pelo reply da IA
+    // — sem depender de vocabulário específico do usuário
+    {
+      // Sinais na mensagem do usuário (amplos — vocabulário variado)
+      const userDonePatterns = [
+        /\b(conclu[íi]|terminei|finalizei|realizei|executei|cumpri|completei)\b/i,
+        /\b(fiz|fiz\s+tudo|já\s+fiz|já\s+fiz\s+tudo)\b/i,
+        /\b(feito|pronto|ok|done|check|✓|✅)\b/i,
+        /foram\s+(conclu[íi]das?|feitas?|finalizadas?|realizadas?|prontas?)/i,
+        /\b(tod[ao]s?|as\s+duas?|os\s+dois?|ambas?|tud[oa])\b.{0,20}\b(feit[ao]s?|conclu[íi]d[ao]s?|finalizad[ao]s?|pronto|resolvid[ao]s?)\b/i,
+        /\b(tudo\s+)?(resolvido|executado|cumprido|missão\s+cumprida|pode\s+tirar|pode\s+apagar)\b/i,
+      ];
+      // Sinais no reply da IA de que ela entendeu conclusão mas não gerou a action
+      const aiDoneReplyPatterns = [
+        /marcad[ao]s?\s+(como\s+)?(conclu[íi]d[ao]s?|feit[ao]s?|finalizad[ao]s?)/i,
+        /tarefa[s]?\s+(conclu[íi]da|marcada|finalizada)/i,
+        /registrei\s+(a\s+)?conclusão/i,
+        /anotei\s+(que\s+)?(foi|foram)\s+(feit[ao]s?|conclu[íi]d[ao]s?)/i,
+        /ótimo.{0,30}(conclu[íi]|feit[ao]|finaliz)/i,
+        /perfeito.{0,50}(tarefa|agenda).{0,30}(vazi[ao]|limpou|zerou)/i,
+      ];
+
+      const hasDoneAct = aiResponse.actions.some(a => a?.action === "DONE");
+      const userSignal = userDonePatterns.some(p => p.test(msgText));
+      const aiSignal = aiDoneReplyPatterns.some(p => p.test(aiResponse.reply || ""));
+
+      if (!hasDoneAct && (userSignal || aiSignal) && pendingTasks.length > 0) {
+        // Se a mensagem menciona uma tarefa específica pelo nome, conclui só ela
+        const specificTask = pendingTasks.find(t =>
+          msgText.toLowerCase().includes(t.title.toLowerCase()) ||
+          (aiResponse.reply || "").toLowerCase().includes(t.title.toLowerCase())
+        );
+        if (specificTask) {
+          console.warn(`[${remoteJid}] ⚠️ Safeguard DONE (semântico): concluindo tarefa específica "${specificTask.title}".`);
+          aiResponse.actions.push({ action: "DONE", parsedData: { title: specificTask.title } });
+        } else if (pendingTasks.length <= 3 || /\b(tudo|todas?|tod[ao]s?|ambas?|os\s+dois?|as\s+duas?)\b/i.test(msgText)) {
+          // Múltiplas tarefas: só faz batch se há poucas (≤3) ou usuário disse "tudo/todas"
+          console.warn(`[${remoteJid}] ⚠️ Safeguard DONE (semântico): concluindo ${pendingTasks.length} tarefa(s) em lote.`);
+          for (const task of pendingTasks) {
+            aiResponse.actions.push({ action: "DONE", parsedData: { title: task.title } });
+          }
         }
       }
     }
