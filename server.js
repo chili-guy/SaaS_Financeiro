@@ -325,15 +325,13 @@ R2. REPLY OBRIGATÓRIO: O campo "reply" nunca fica vazio. Se só registrou, conf
     💰 Valor: R$ X,XX
     📅 Data: DD/MM/AAAA
     🏷️ Categoria: [categoria]"
-    Para tarefas/lembretes — SEMPRE inclua se o lembrete está ativo e o horário:
+    Para tarefas/lembretes — SEMPRE inclua a data, hora e status do lembrete:
     "✅ Lembrete criado!
     📝 [Título]
-    📅 [Data/hora — ex: Hoje às 21:15 ou DD/MM às HH:MM]
-    🔔 Lembrete: ativo às HH:MM"
-    Se não tiver horário definido:
-    "✅ Tarefa registrada!
-    📝 [Título]
-    🔔 Lembrete: sem horário definido"
+    📅 [Data/hora — ex: Hoje às 09:00 ou DD/MM às HH:MM]
+    🔔 Lembrete: será enviado às HH:MM"
+    REGRA DE HORÁRIO: se o usuário não informar hora, o sistema usa 09:00 como padrão.
+    Nunca diga "sem horário definido" para tarefas com data — sempre haverá um horário (mínimo 09:00).
 
 R3. CONSULTAS: Para qualquer pedido de "ver", "listar", "mostrar" ou "extrato", use SEMPRE a action QUERY.
     No campo "reply", escreva apenas uma frase curta introdutória (ex: "Aqui estão seus gastos:").
@@ -743,13 +741,19 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
             if (tMatch) {
               const hour = parseInt(tMatch[1], 10);
               const min  = parseInt(tMatch[2] || '0', 10);
-              // Ignora horas implausíveis (>23) ou minutos inválidos (>59)
               if (hour <= 23 && min <= 59) {
                 dueDate = new Date();
                 dueDate.setHours(hour, min, 0, 0);
                 console.log(`[${remoteJid}] 🕐 Fallback time extract: ${hour}:${String(min).padStart(2,'0')}`);
               }
             }
+          }
+
+          // Padrão 9h: se a IA enviou uma data mas sem horário (meia-noite = hora não especificada),
+          // aplica 09:00 como horário padrão de lembrete
+          if (dueDate && dueDate.getHours() === 0 && dueDate.getMinutes() === 0) {
+            dueDate.setHours(9, 0, 0, 0);
+            console.log(`[${remoteJid}] 🕘 Horário padrão aplicado: 09:00`);
           }
 
           const shouldRemind = dueDate !== null;
