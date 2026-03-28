@@ -706,6 +706,16 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
             });
             console.log(`[${remoteJid}] ✅ Tarefa criada: "${title}"`);
           }
+
+          // Sempre sobrescreve o reply da IA com o formato padronizado de confirmação de tarefa
+          if (dueDate) {
+            const hh = String(dueDate.getHours()).padStart(2, '0');
+            const mm = String(dueDate.getMinutes()).padStart(2, '0');
+            const dateStr = dueDate.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" });
+            aiResponse.reply = `✅ Lembrete criado!\n📝 ${title}\n📅 ${dateStr} às ${hh}:${mm}\n🔔 Lembrete: ativo às ${hh}:${mm}`;
+          } else {
+            aiResponse.reply = `✅ Tarefa registrada!\n📝 ${title}\n🔔 Lembrete: sem horário definido`;
+          }
           hasChange = true;
         }
 
