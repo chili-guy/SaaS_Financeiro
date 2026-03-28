@@ -1079,6 +1079,15 @@ const server = http.createServer(async (req, res) => {
             }
             if (!cleanPhone.includes("@s.whatsapp.net")) cleanPhone = `${cleanPhone}@s.whatsapp.net`;
 
+            // Salva o telefone no cliente Stripe para uso futuro (cancelamento, falha)
+            if (session.customer) {
+              try {
+                await stripe.customers.update(session.customer, { phone: cleanPhone.replace('@s.whatsapp.net', '') });
+              } catch (e) {
+                console.warn("[STRIPE] Não foi possível salvar phone no customer:", e.message);
+              }
+            }
+
             const cNo9 = cleanPhone.replace(/^55(\d{2})9/, '55$1');
             const cWith9 = cleanPhone.replace(/^55(\d{2})(\d{8})@/, '55$19$2@');
 
