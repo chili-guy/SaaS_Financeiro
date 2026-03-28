@@ -183,7 +183,8 @@ async function processNicoCore(remoteJid, msgText, instance) {
       ? recentIncomes.map(i => `• R$${i.amount.toFixed(2)} — ${i.description} (${i.category}) [${fmtDate(i.date)}]`).join("\n")
       : "Nenhuma receita recente";
 
-    const dataAtual = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const _now = new Date();
+    const dataAtual = _now.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
     const userName = user.name && !["Nico User", "Investidor", "Investidor ", "Prezado"].includes(user.name) ? user.name : null;
 
     // ─── SYSTEM PROMPT CIRÚRGICO ────────────────────────────────────────────────
