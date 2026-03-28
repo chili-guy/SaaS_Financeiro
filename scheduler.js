@@ -52,9 +52,9 @@ async function checkReminders() {
                 // --- LÓGICA 2: Notificação NO HORÁRIO (Real Time) ---
                 if (now >= dueDate && !task.notified) {
                     console.log(`[Scheduler] Aviso NO HORÁRIO para ${cleanNumber}: ${task.title}`);
-                    const text = `🔔 *HORA DO LEMBRETE!* \n\nOi! Chegou o horário de: \n*"${task.title}"*\n\nJá conseguiu concluir? Basta me avisar! 😊`;
+                    const text = `🔔 HORA DO LEMBRETE!\n\nOi! Chegou o horário de:\n"${task.title}"\n\nJá conseguiu concluir? Basta me avisar!`;
                     const fullRecipient = cleanNumber + "@s.whatsapp.net";
-                    
+
                     // Garante entrega via texto primeiro
                     await sendText(fullRecipient, text, INSTANCE);
                     // Tenta botões como extra
@@ -66,6 +66,12 @@ async function checkReminders() {
                     await prisma.task.update({
                         where: { id: task.id },
                         data: { notified: true }
+                    });
+
+                    // Salva o lembrete no histórico de mensagens — permite que a IA saiba
+                    // qual tarefa foi lembrada quando o usuário responder em seguida
+                    await prisma.message.create({
+                        data: { user_id: task.user_id, role: "assistant", content: text }
                     });
                 }
             }
