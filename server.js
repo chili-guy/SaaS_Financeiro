@@ -707,7 +707,7 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
                 amount: val,
                 description: parsedData.description || "Gasto",
                 category: parsedData.category || "Outros",
-                date: parsedData.date ? new Date(String(parsedData.date).replace(/Z$/i, "")) : new Date()
+                date: parsedData.date ? (() => { const s = String(parsedData.date).replace(/Z$/i, ""); return new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s); })() : new Date()
               }
             });
             hasChange = true;
@@ -726,7 +726,7 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
                 amount: val,
                 description: parsedData.description || "Receita",
                 category: parsedData.category || "Renda",
-                date: parsedData.date ? new Date(String(parsedData.date).replace(/Z$/i, "")) : new Date()
+                date: parsedData.date ? (() => { const s = String(parsedData.date).replace(/Z$/i, ""); return new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s); })() : new Date()
               }
             });
             hasChange = true;
