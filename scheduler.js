@@ -16,7 +16,8 @@ async function checkReminders() {
         const activeTasks = await prisma.task.findMany({
             where: {
                 completed: false,
-                due_date: { not: null, lte: inFifteenMinutes }
+                due_date: { not: null, lte: inFifteenMinutes },
+                user: { status: 'ACTIVE' }   // só usuários ativos — evita full table scan
             },
             include: { user: true }
         });
@@ -33,7 +34,7 @@ async function checkReminders() {
                 // --- LÓGICA 1: Notificação de 15 MINUTOS ANTES ---
                 if (!isShortTermTask && !task.notified_5min && now < dueDate) {
                     console.log(`[Scheduler] Aviso de 15 min para ${cleanNumber}: ${task.title}`);
-                    const text = `⏳ *FALTAM 15 MINUTOS!* \n\nOlá! Passo pra te lembrar que seu compromisso: \n*"${task.title}"*\ncomeça em breve! 🔔`;
+                    const text = `⏳ FALTAM 15 MINUTOS!\n\nOlá! Passo pra te lembrar que seu compromisso:\n"${task.title}"\ncomeça em breve! 🔔`;
                     const fullRecipient = cleanNumber + "@s.whatsapp.net";
                     
                     // Garante entrega via texto primeiro

@@ -84,7 +84,7 @@ function formatFinanceRecords(records, type = "EXPENSE") {
     reply += `${emoji} ${cat.toUpperCase()} (${pct}%)\n`;
     data.items.forEach(i => {
       const d = new Date(i.date || new Date());
-      const dStr = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+      const dStr = d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" });
       reply += `▫️ R$ ${i.amount.toFixed(2)} — ${i.description} (${dStr})\n`;
     });
     reply += `└─ Subtotal: R$ ${data.total.toFixed(2)}\n\n`;
@@ -139,13 +139,14 @@ async function processNicoCore(remoteJid, msgText, instance) {
         role: m.role,
         content: sanitizeText(
           m.role === "assistant"
-            ? m.content.split("\n")[0].replace(/[✅🗑️📊📈📉]/g, '').substring(0, 100).trim()
+            ? m.content.split("\n")[0].replace(/[✅🗑️📊📈📉]/g, '').substring(0, 180).trim()
             : m.content
         )
       }));
 
     // Salva mensagem atual ANTES de chamar a IA (para ficar no contexto da próxima)
-    await prisma.message.create({ data: { user_id: user.id, role: "user", content: msgText } });
+    // Limita a 1000 chars para evitar poluição do contexto com mensagens muito longas
+    await prisma.message.create({ data: { user_id: user.id, role: "user", content: msgText.substring(0, 1000) } });
 
     // 3. Contexto financeiro e de tarefas
     const firstDayMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -691,6 +692,7 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
     });
 
     let hasChange = false;
+    const taskReplies = []; // acumula confirmações de múltiplas tarefas
 
     for (const act of uniqueActs) {
       const { action, parsedData = {} } = act;
@@ -785,14 +787,14 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
             console.log(`[${remoteJid}] ✅ Tarefa criada: "${title}"`);
           }
 
-          // Sempre sobrescreve o reply da IA com o formato padronizado de confirmação de tarefa
+          // Acumula confirmação — suporta múltiplas tarefas na mesma mensagem
           if (dueDate) {
             const hh = String(dueDate.getHours()).padStart(2, '0');
             const mm = String(dueDate.getMinutes()).padStart(2, '0');
             const dateStr = dueDate.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" });
-            aiResponse.reply = `✅ Lembrete criado!\n📝 ${title}\n📅 ${dateStr} às ${hh}:${mm}\n🔔 Lembrete: ativo às ${hh}:${mm}`;
+            taskReplies.push(`✅ Lembrete criado!\n📝 ${title}\n📅 ${dateStr} às ${hh}:${mm}\n🔔 Lembrete: ativo às ${hh}:${mm}`);
           } else {
-            aiResponse.reply = `✅ Tarefa registrada!\n📝 ${title}\n🔔 Lembrete: sem horário definido`;
+            taskReplies.push(`✅ Tarefa registrada!\n📝 ${title}\n🔔 Lembrete: sem horário definido`);
           }
           hasChange = true;
         }
@@ -1058,6 +1060,11 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
       }
     } // fim for actions
 
+    // Aplica confirmações acumuladas de múltiplas tarefas
+    if (taskReplies.length > 0) {
+      aiResponse.reply = taskReplies.join("\n\n");
+    }
+
     // ─── Resposta final ────────────────────────────────────────────────────────
     let finalReply = (aiResponse.reply || "").trim();
 
@@ -1167,7 +1174,8 @@ async function sendEvolutionButtons(number, text, instance, buttons) {
 // ─── Servidor HTTP ─────────────────────────────────────────────────────────────
 
 const server = http.createServer(async (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  const allowedOrigin = process.env.APP_URL || "http://localhost:3000";
+  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
 
@@ -1202,12 +1210,17 @@ const server = http.createServer(async (req, res) => {
   // ── Assinar (30 dias grátis) ───────────────────────────────────────────────
   if (req.method === 'GET' && cleanUrl === '/assinar') {
     try {
+      // Aceita ?jid=5591999999999 para vincular checkout ao usuário WhatsApp
+      const jidParam = new URL(req.url, `http://localhost`).searchParams.get('jid');
+      const clientRef = jidParam ? (jidParam.includes('@') ? jidParam : `${jidParam}@s.whatsapp.net`) : undefined;
+
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ['card'],
         line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
         mode: 'subscription',
         subscription_data: { trial_period_days: 30 },
         allow_promotion_codes: true,
+        client_reference_id: clientRef,
         phone_number_collection: { enabled: true },
         success_url: `${APP_URL}`,
         cancel_url: `${APP_URL}`,
@@ -1334,6 +1347,14 @@ const server = http.createServer(async (req, res) => {
 
   // ── Webhook Evolution (WhatsApp) ───────────────────────────────────────────
   if (req.method === "POST" && (cleanUrl === "/webhook/evolution" || cleanUrl === "/webhook")) {
+    // Valida apikey do webhook se configurada
+    const webhookSecret = process.env.WEBHOOK_SECRET || "";
+    if (webhookSecret) {
+      const incomingKey = req.headers['apikey'] || req.headers['x-api-key'] || "";
+      if (incomingKey !== webhookSecret) {
+        res.writeHead(401); return res.end("Unauthorized");
+      }
+    }
     let body = "";
     req.on("data", c => body += c);
     req.on("end", async () => {
@@ -1388,10 +1409,15 @@ const server = http.createServer(async (req, res) => {
 
         if (buffer.timer) clearTimeout(buffer.timer);
         buffer.timer = setTimeout(() => {
-          const tryProcess = () => {
+          const tryProcess = (attempt = 0) => {
+            if (attempt >= 10) {
+              console.error(`[${remoteJid}] ❌ Máximo de tentativas atingido — mensagem descartada.`);
+              messageBuffers.delete(remoteJid);
+              return;
+            }
             if (userLocks.has(remoteJid)) {
-              console.log(`[${remoteJid}] ⏳ Ocupado, re-agendando em 1.5s...`);
-              setTimeout(tryProcess, 1500);
+              console.log(`[${remoteJid}] ⏳ Ocupado, re-agendando em 1.5s... (tentativa ${attempt + 1}/10)`);
+              setTimeout(() => tryProcess(attempt + 1), 1500);
               return;
             }
             const fullMsg = buffer.texts.join("\n");
@@ -1412,7 +1438,12 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ── Arquivos estáticos ─────────────────────────────────────────────────────
-  const fPath = path.join(__dir, req.url === "/" ? "index.html" : req.url);
+  // Proteção contra path traversal: bloqueia qualquer caminho fora do diretório da app
+  const rawStaticPath = req.url.split('?')[0];
+  const fPath = path.join(__dir, rawStaticPath === "/" ? "index.html" : rawStaticPath);
+  if (!fPath.startsWith(path.resolve(__dir) + path.sep) && fPath !== path.join(path.resolve(__dir), "index.html")) {
+    res.writeHead(403); return res.end("403 Forbidden");
+  }
   fs.readFile(fPath, (err, data) => {
     if (err) { res.writeHead(404); return res.end("Not found"); }
     const ext = path.extname(fPath);

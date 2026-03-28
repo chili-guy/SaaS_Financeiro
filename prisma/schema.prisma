@@ -31,6 +31,7 @@ model Message {
   content    String
   created_at DateTime @default(now())
 
+  @@index([user_id, created_at])
   @@map("fin_messages")
 }
 
@@ -43,6 +44,7 @@ model Expense {
   category    String   @default("Outros")
   date        DateTime @default(now())
 
+  @@index([user_id, date])
   @@map("fin_expenses")
 }
 
@@ -55,21 +57,24 @@ model Income {
   category    String   @default("Renda")
   date        DateTime @default(now())
 
+  @@index([user_id, date])
   @@map("fin_incomes")
 }
 
 model Task {
-  id          String   @id @default(uuid())
-  user_id     String
-  user        User     @relation(fields: [user_id], references: [id])
-  title       String
-  due_date    DateTime?
-  completed   Boolean  @default(false)
-  notified    Boolean  @default(false)
-  notified_5min Boolean @default(false)
-  reminder_active Boolean @default(true)
-  created_at  DateTime @default(now())
+  id              String    @id @default(uuid())
+  user_id         String
+  user            User      @relation(fields: [user_id], references: [id])
+  title           String
+  due_date        DateTime?
+  completed       Boolean   @default(false)
+  notified        Boolean   @default(false)
+  notified_5min   Boolean   @default(false)
+  reminder_active Boolean   @default(true)
+  created_at      DateTime  @default(now())
 
+  @@index([user_id, completed])
+  @@index([completed, due_date])   // usado pelo scheduler
   @@map("fin_tasks")
 }
 
