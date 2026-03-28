@@ -257,6 +257,8 @@ independente do vocabulário que usar.
    "põe na agenda: academia às 7h" / "não me deixa esquecer da consulta segunda"
    "anota que tenho dentista dia 5 às 10h" / "cria um lembrete pra ligar pra fulano amanhã"
    "compromisso com cliente hoje às 15h" / "study session de 15h às 17h"
+   "tomar remédio 16h44 hj" / "cinema 20h" / "reunião 14h30" / "lembrete 9h amanhã"
+   ATENÇÃO: horários sem "às" também são válidos — "cinema 20h" = cinema às 20h hoje.
    → { "action": "TASK", "parsedData": { "title": "Pagar aluguel", "due_date": "2025-01-15T09:00:00", "remind": true } }
 
 4. CONSULTAR DADOS → action "QUERY"
@@ -267,10 +269,15 @@ independente do vocabulário que usar.
    Gastos/Despesas — exemplos: "quero ver os meus gastos" / "quanto saiu esse mês" / "o que gastei?"
    → { "actions": [{ "action": "QUERY", "parsedData": { "type": "EXPENSES", "date": null } }], "reply": "Aqui estão seus gastos:" }
 
+   Gastos de hoje especificamente — exemplos: "quanto gastei hoje" / "o que saiu hoje" / "meus gastos de hj"
+   → { "actions": [{ "action": "QUERY", "parsedData": { "type": "EXPENSES", "date": "HOJE" } }], "reply": "Aqui estão seus gastos de hoje:" }
+   ATENÇÃO: "quanto gastei hoje" é EXPENSES com date: "HOJE", NUNCA é SUMMARY.
+
    Agenda/Tarefas — exemplos: "minha agenda" / "o que tenho hoje?" / "tem algo pra amanhã?" / "próximos compromissos"
    → { "actions": [{ "action": "QUERY", "parsedData": { "type": "TASKS", "date": null } }], "reply": "Aqui está sua agenda:" }
 
-   Resumo/Saldo — exemplos: "como estou financeiramente?" / "me dá um panorama" / "situação geral"
+   Resumo/Saldo — exemplos: "como estou financeiramente?" / "me dá um panorama" / "situação geral" / "meu saldo"
+   ATENÇÃO: SUMMARY é para visão geral financeira, NÃO para consultas de gastos específicos.
    → { "actions": [{ "action": "QUERY", "parsedData": { "type": "SUMMARY", "date": null } }], "reply": "Aqui está seu resumo:" }
 
    Detalhado — exemplos: "detalhe tudo" / "gastos e receitas completos"
@@ -686,8 +693,22 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
           const title = cleanTitle(parsedData.title || "");
           if (!title) { console.warn(`[${remoteJid}] ⚠️ TASK ignorada: título vazio`); continue; }
 
-          const dueDate = parsedData.due_date ? new Date(String(parsedData.due_date).replace(/Z$/i, "")) : null;
-          const shouldRemind = parsedData.remind === true && dueDate !== null;
+          let dueDate = parsedData.due_date ? new Date(String(parsedData.due_date).replace(/Z$/i, "")) : null;
+
+          // Fallback: se IA não enviou due_date mas a mensagem contém horário, extrai diretamente
+          if (!dueDate) {
+            const tMatch = msgText.match(/\bàs?\s*(\d{1,2})[h:](\d{2})\b/i)
+                        || msgText.match(/\b(\d{1,2})h(\d{2})\b/i)
+                        || msgText.match(/\b(\d{1,2})[h:]\s*(\d{2})\b/i)
+                        || msgText.match(/\b(\d{1,2})h\b/i);
+            if (tMatch) {
+              dueDate = new Date();
+              dueDate.setHours(parseInt(tMatch[1], 10), parseInt(tMatch[2] || '0', 10), 0, 0);
+              console.log(`[${remoteJid}] 🕐 Fallback time extract: ${dueDate}`);
+            }
+          }
+
+          const shouldRemind = dueDate !== null;
           const notifiedFlag = !shouldRemind; // false = alarme ativo
 
           const existing = await prisma.task.findFirst({
@@ -726,20 +747,39 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
           // Resolução de período
           let dateFilter = { gte: firstDayMonth };
           if (parsedData.date) {
-            const rawDate = String(parsedData.date);
-            const monthMatch = rawDate.match(/^(\d{4})-(\d{2})$/);
-            if (monthMatch) {
-              const yr = parseInt(monthMatch[1]);
-              const mo = parseInt(monthMatch[2]) - 1;
-              dateFilter = { gte: new Date(yr, mo, 1), lte: new Date(yr, mo + 1, 0, 23, 59, 59) };
+            const rawDate = String(parsedData.date).trim().toUpperCase();
+            if (rawDate === "HOJE" || rawDate === "TODAY") {
+              const t = new Date();
+              dateFilter = {
+                gte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 0, 0, 0),
+                lte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59)
+              };
             } else {
-              const d = new Date(rawDate);
-              if (!isNaN(d.getTime())) {
-                dateFilter = {
-                  gte: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0),
-                  lte: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59)
-                };
+              const monthMatch = rawDate.match(/^(\d{4})-(\d{2})$/);
+              if (monthMatch) {
+                const yr = parseInt(monthMatch[1]);
+                const mo = parseInt(monthMatch[2]) - 1;
+                dateFilter = { gte: new Date(yr, mo, 1), lte: new Date(yr, mo + 1, 0, 23, 59, 59) };
+              } else {
+                const d = new Date(rawDate);
+                if (!isNaN(d.getTime())) {
+                  dateFilter = {
+                    gte: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0),
+                    lte: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59)
+                  };
+                }
               }
+            }
+          }
+
+          // Fallback semântico: se mensagem menciona "hoje/hj" e query é EXPENSES/INCOMES, filtra por hoje
+          if (!parsedData.date && queryType !== "SUMMARY" && queryType !== "TASKS") {
+            if (/\b(hoje|hj)\b/i.test(msgText)) {
+              const t = new Date();
+              dateFilter = {
+                gte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 0, 0, 0),
+                lte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59)
+              };
             }
           }
 
