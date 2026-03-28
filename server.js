@@ -876,7 +876,7 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
 
           } else if (queryType === "EXPENSES") {
             const exps = await prisma.expense.findMany({
-              where: { user_id: user.id, ...(parsedData.date ? { date: dateFilter } : { date: { gte: firstDayMonth } }) },
+              where: { user_id: user.id, date: dateFilter },
               orderBy: { date: 'desc' },
               take: 50
             });
@@ -884,7 +884,7 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
 
           } else if (queryType === "INCOMES") {
             const incs = await prisma.income.findMany({
-              where: { user_id: user.id, ...(parsedData.date ? { date: dateFilter } : {}) },
+              where: { user_id: user.id, date: dateFilter },
               orderBy: { date: 'desc' },
               take: 50
             });
