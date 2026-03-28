@@ -847,9 +847,9 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
               queryType = "TASKS";
           }
 
-          // Override contextual: "e dessa semana?" é follow-up — herda tipo da última consulta
+          // Override contextual: "e dessa semana?" / "e na sexta?" é follow-up — herda tipo da última consulta
           if (queryType === "SUMMARY") {
-            const isFollowUp = /^(e\b|e\s+(a[aio]?|o|essa?|nessa?|esta?|neste?|desse?|deste?|do|da|no|na)\b)/i.test(msgLowerQ);
+            const isFollowUp = /^(e\b|e\s+(a[aio]?|o|essa?|nessa?|esta?|neste?|desse?|deste?|do|da|no|na|na\s+sexta|na\s+segunda)\b)/i.test(msgLowerQ);
             if (isFollowUp) {
               const lastBotQuery = memory
                 .filter(m => m.role === "assistant")
@@ -859,6 +859,7 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
               if (lastBotQuery) {
                 if (/EXPENSES/i.test(lastBotQuery)) { queryType = "EXPENSES"; console.log(`[${remoteJid}] 🔄 Context inherit: EXPENSES`); }
                 else if (/INCOMES/i.test(lastBotQuery)) { queryType = "INCOMES"; console.log(`[${remoteJid}] 🔄 Context inherit: INCOMES`); }
+                else if (/TASKS/i.test(lastBotQuery)) { queryType = "TASKS"; console.log(`[${remoteJid}] 🔄 Context inherit: TASKS`); }
               }
             }
           }
@@ -920,8 +921,17 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
           let queryResult = "";
 
           if (queryType === "TASKS") {
+            // Se há um dateFilter específico (não o default do mês inteiro), filtra tarefas pelo due_date
+            const hasSpecificDate = parsedData.date ||
+              /\b(hoje|hj|amanhã|ontem|sexta|segunda|terça|quarta|quinta|sábado|domingo)\b/i.test(msgText) ||
+              /\b(essa|esta|nessa|nesta|dessa|desta)\s+semana\b/i.test(msgText);
+
+            const taskWhere = hasSpecificDate
+              ? { user_id: user.id, completed: false, due_date: dateFilter }
+              : { user_id: user.id, completed: false };
+
             const list = await prisma.task.findMany({
-              where: { user_id: user.id, completed: false },
+              where: taskWhere,
               orderBy: { due_date: 'asc' }
             });
             if (list.length > 0) {
