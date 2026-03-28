@@ -312,12 +312,21 @@ R1. MÚLTIPLOS PEDIDOS: Se o usuário mandar vários pedidos numa mensagem, gere
     Exemplo: "gastei 20 na farmácia e 50 no mercado" → duas actions EXPENSE.
 
 R2. REPLY OBRIGATÓRIO: O campo "reply" nunca fica vazio. Se só registrou, confirme brevemente.
-    Formato de confirmação:
+    Para gastos e receitas:
     "✅ [Tipo] registrado!
     📝 [Descrição]
-    💰 Valor: R$ X,XX (se financeiro)
+    💰 Valor: R$ X,XX
     📅 Data: DD/MM/AAAA
     🏷️ Categoria: [categoria]"
+    Para tarefas/lembretes — SEMPRE inclua se o lembrete está ativo e o horário:
+    "✅ Lembrete criado!
+    📝 [Título]
+    📅 [Data/hora — ex: Hoje às 21:15 ou DD/MM às HH:MM]
+    🔔 Lembrete: ativo às HH:MM"
+    Se não tiver horário definido:
+    "✅ Tarefa registrada!
+    📝 [Título]
+    🔔 Lembrete: sem horário definido"
 
 R3. CONSULTAS: Para qualquer pedido de "ver", "listar", "mostrar" ou "extrato", use SEMPRE a action QUERY.
     No campo "reply", escreva apenas uma frase curta introdutória (ex: "Aqui estão seus gastos:").
@@ -558,10 +567,12 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
             const d = new Date();
             d.setHours(parseInt(timeMatch[1], 10), parseInt(timeMatch[2] || '0', 10), 0, 0);
             dueDate = d.toISOString().replace('Z', '');
-            // Corrige o reply para incluir o horário claramente
             const hh = String(parseInt(timeMatch[1])).padStart(2, '0');
             const mm = String(parseInt(timeMatch[2] || '0')).padStart(2, '0');
-            aiResponse.reply = `✅ Tarefa registrada!\n📝 ${title}\n⏰ Horário: ${hh}:${mm}\n🔔 Lembrete ativo`;
+            const dateStr = d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" });
+            aiResponse.reply = `✅ Lembrete criado!\n📝 ${title}\n📅 ${dateStr} às ${hh}:${mm}\n🔔 Lembrete: ativo às ${hh}:${mm}`;
+          } else {
+            aiResponse.reply = `✅ Tarefa registrada!\n📝 ${title}\n🔔 Lembrete: sem horário definido`;
           }
           console.warn(`[${remoteJid}] ⚠️ Safeguard TASK: confirmação sem action. Injetando TASK "${title}".`);
           aiResponse.actions.push({ action: "TASK", parsedData: { title, due_date: dueDate, remind: dueDate !== null } });
