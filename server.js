@@ -622,19 +622,49 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
       const aiSignal = aiDoneReplyPatterns.some(p => p.test(aiResponse.reply || ""));
 
       if (!hasDoneAct && (userSignal || aiSignal) && pendingTasks.length > 0) {
-        // Se a mensagem menciona uma tarefa específica pelo nome, conclui só ela
+        const msgLower = msgText.toLowerCase();
+        const replyLower = (aiResponse.reply || "").toLowerCase();
+
+        // 1. Tarefa mencionada explicitamente pelo nome na mensagem ou reply da IA
         const specificTask = pendingTasks.find(t =>
-          msgText.toLowerCase().includes(t.title.toLowerCase()) ||
-          (aiResponse.reply || "").toLowerCase().includes(t.title.toLowerCase())
+          msgLower.includes(t.title.toLowerCase()) || replyLower.includes(t.title.toLowerCase())
         );
+
         if (specificTask) {
-          console.warn(`[${remoteJid}] ⚠️ Safeguard DONE (semântico): concluindo tarefa específica "${specificTask.title}".`);
+          console.warn(`[${remoteJid}] ⚠️ Safeguard DONE: tarefa específica "${specificTask.title}".`);
           aiResponse.actions.push({ action: "DONE", parsedData: { title: specificTask.title } });
-        } else if (pendingTasks.length <= 3 || /\b(tudo|todas?|tod[ao]s?|ambas?|os\s+dois?|as\s+duas?)\b/i.test(msgText)) {
-          // Múltiplas tarefas: só faz batch se há poucas (≤3) ou usuário disse "tudo/todas"
-          console.warn(`[${remoteJid}] ⚠️ Safeguard DONE (semântico): concluindo ${pendingTasks.length} tarefa(s) em lote.`);
+
+        } else if (/\b(tudo|todas?|tod[ao]s?|ambas?|os\s+dois?|as\s+duas?)\b/i.test(msgText)) {
+          // 2. Usuário disse explicitamente "tudo/todas/os dois" → batch
+          console.warn(`[${remoteJid}] ⚠️ Safeguard DONE: batch explícito (${pendingTasks.length} tarefas).`);
           for (const task of pendingTasks) {
             aiResponse.actions.push({ action: "DONE", parsedData: { title: task.title } });
+          }
+
+        } else {
+          // 3. Confirmação genérica ("já sim", "feito", "ok") → busca contexto no histórico recente
+          // para identificar qual tarefa estava sendo discutida (ex: lembrete que acabou de disparar)
+          const recentBotMsgs = memory
+            .filter(m => m.role === "assistant")
+            .slice(-3)
+            .map(m => m.content.toLowerCase());
+
+          const contextTask = pendingTasks.find(t =>
+            recentBotMsgs.some(msg => msg.includes(t.title.toLowerCase()))
+          );
+
+          if (contextTask) {
+            console.warn(`[${remoteJid}] ⚠️ Safeguard DONE: tarefa do contexto recente "${contextTask.title}".`);
+            aiResponse.actions.push({ action: "DONE", parsedData: { title: contextTask.title } });
+          } else {
+            // 4. Fallback: marca apenas a tarefa com due_date mais próxima
+            const nearest = [...pendingTasks].sort((a, b) => {
+              if (!a.due_date) return 1;
+              if (!b.due_date) return -1;
+              return new Date(a.due_date) - new Date(b.due_date);
+            })[0];
+            console.warn(`[${remoteJid}] ⚠️ Safeguard DONE: fallback due_date mais próxima "${nearest.title}".`);
+            aiResponse.actions.push({ action: "DONE", parsedData: { title: nearest.title } });
           }
         }
       }
@@ -704,15 +734,21 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
           let dueDate = parsedData.due_date ? new Date(String(parsedData.due_date).replace(/Z$/i, "")) : null;
 
           // Fallback: se IA não enviou due_date mas a mensagem contém horário, extrai diretamente
+          // Prioridade: "às 21h" > "21h30" > "21h" — evita capturar timestamps como "17:06"
           if (!dueDate) {
-            const tMatch = msgText.match(/\bàs?\s*(\d{1,2})[h:](\d{2})\b/i)
-                        || msgText.match(/\b(\d{1,2})h(\d{2})\b/i)
-                        || msgText.match(/\b(\d{1,2})[h:]\s*(\d{2})\b/i)
-                        || msgText.match(/\b(\d{1,2})h\b/i);
+            const tMatch = msgText.match(/\bàs?\s*(\d{1,2})[h:](\d{2})\b/i)   // "às 21h30" ou "as 21:30"
+                        || msgText.match(/\bàs?\s*(\d{1,2})h\b/i)              // "às 21h"
+                        || msgText.match(/\b(\d{1,2})h(\d{2})\b/i)             // "21h30"
+                        || msgText.match(/\b(\d{1,2})h\b/i);                   // "21h"
             if (tMatch) {
-              dueDate = new Date();
-              dueDate.setHours(parseInt(tMatch[1], 10), parseInt(tMatch[2] || '0', 10), 0, 0);
-              console.log(`[${remoteJid}] 🕐 Fallback time extract: ${dueDate}`);
+              const hour = parseInt(tMatch[1], 10);
+              const min  = parseInt(tMatch[2] || '0', 10);
+              // Ignora horas implausíveis (>23) ou minutos inválidos (>59)
+              if (hour <= 23 && min <= 59) {
+                dueDate = new Date();
+                dueDate.setHours(hour, min, 0, 0);
+                console.log(`[${remoteJid}] 🕐 Fallback time extract: ${hour}:${String(min).padStart(2,'0')}`);
+              }
             }
           }
 
