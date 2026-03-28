@@ -272,18 +272,20 @@ independente do vocabulário que usar.
    IMPORTANTE: Use QUERY para qualquer pedido de visualização. Nunca escreva listas no "reply".
    Tipos disponíveis: "TASKS", "EXPENSES", "INCOMES", "SUMMARY"
 
-   Gastos/Despesas — exemplos: "quero ver os meus gastos" / "quanto saiu esse mês" / "o que gastei?"
+   Gastos/Despesas — USE EXPENSES para QUALQUER pergunta sobre o que foi gasto:
+   "quero ver meus gastos" / "quanto saiu esse mês" / "o que gastei?" / "quanto gastei hj" /
+   "quanto gastei hoje" / "quanto gastei essa semana" / "quanto gastei nesse mês" / "meus gastos de março"
    → { "actions": [{ "action": "QUERY", "parsedData": { "type": "EXPENSES", "date": null } }], "reply": "Aqui estão seus gastos:" }
+   Para gastos de hoje: date: "HOJE" — Para gastos de um mês: date: "YYYY-MM"
+   REGRA: "quanto gastei X" é SEMPRE EXPENSES. NUNCA use SUMMARY para perguntas de gastos.
 
-   Gastos de hoje especificamente — exemplos: "quanto gastei hoje" / "o que saiu hoje" / "meus gastos de hj"
-   → { "actions": [{ "action": "QUERY", "parsedData": { "type": "EXPENSES", "date": "HOJE" } }], "reply": "Aqui estão seus gastos de hoje:" }
-   ATENÇÃO: "quanto gastei hoje" é EXPENSES com date: "HOJE", NUNCA é SUMMARY.
-
-   Agenda/Tarefas — exemplos: "minha agenda" / "o que tenho hoje?" / "tem algo pra amanhã?" / "próximos compromissos"
+   Agenda/Tarefas — exemplos: "minha agenda" / "o que tenho amanhã?" / "tem algum compromisso?"
+   (NÃO use TASKS para "hoje" quando a pergunta é sobre gastos)
    → { "actions": [{ "action": "QUERY", "parsedData": { "type": "TASKS", "date": null } }], "reply": "Aqui está sua agenda:" }
 
-   Resumo/Saldo — exemplos: "como estou financeiramente?" / "me dá um panorama" / "situação geral" / "meu saldo"
-   ATENÇÃO: SUMMARY é para visão geral financeira, NÃO para consultas de gastos específicos.
+   Resumo/Saldo geral — USE SUMMARY apenas para visão financeira completa (receitas + gastos + saldo):
+   "como estou financeiramente?" / "me dá um panorama" / "meu saldo" / "resumo do mês"
+   SUMMARY nunca deve ser usado para responder "quanto gastei X" — use EXPENSES.
    → { "actions": [{ "action": "QUERY", "parsedData": { "type": "SUMMARY", "date": null } }], "reply": "Aqui está seu resumo:" }
 
    Detalhado — exemplos: "detalhe tudo" / "gastos e receitas completos"
@@ -479,11 +481,12 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
       if (looksLikeEcho && !hasQueryAct) {
         const lowerMsg = msgText.toLowerCase();
         let queryType = null;
-        if (/\b(gastos?|despesas?|extrato|gast[ei]|pagu[ei]|compra[ei]|saiu)\b/.test(lowerMsg))                           queryType = "EXPENSES";
-        else if (/\b(receitas?|entrad[ao]s?|sal[aá]rio|renda|recebi|entrou)\b/.test(lowerMsg))                            queryType = "INCOMES";
-        else if (/\b(tarefas?|agenda|compromisso|amanh[aã]|hoje|semana|lembretes?)\b/.test(lowerMsg))                     queryType = "TASKS";
+        // EXPENSES e INCOMES têm prioridade — "gastei hoje" deve virar EXPENSES, não TASKS
+        if (/\b(gastos?|despesas?|extrato|gast[ei]|pagu[ei]|compra[ei]|saiu|quanto\s+gast)\b/.test(lowerMsg))             queryType = "EXPENSES";
+        else if (/\b(receitas?|entrad[ao]s?|sal[aá]rio|renda|recebi|entrou|quanto\s+recebi)\b/.test(lowerMsg))            queryType = "INCOMES";
         else if (/\b(resumo|saldo|balan[cç]o|situa[cç][aã]o|panorama|vis[aã]o|geral|como estou|quanto tenho)\b/.test(lowerMsg)) queryType = "SUMMARY";
-        else queryType = "SUMMARY"; // fallback: eco detectado mas sem keyword → consulta geral
+        else if (/\b(tarefas?|agenda|compromisso|amanh[aã]|lembretes?)\b/.test(lowerMsg))                                 queryType = "TASKS";
+        else queryType = "SUMMARY";
 
         console.warn(`[${remoteJid}] ⚠️ Safeguard: eco detectado. Injetando QUERY ${queryType}.`);
         aiResponse.actions.push({ action: "QUERY", parsedData: { type: queryType, date: null } });
@@ -801,7 +804,14 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
 
         // ── QUERY ─────────────────────────────────────────────────────────────
         else if (action === "QUERY") {
-          const queryType = (parsedData.type || "SUMMARY").toUpperCase();
+          let queryType = (parsedData.type || "SUMMARY").toUpperCase();
+
+          // Override semântico: se IA retornou SUMMARY mas mensagem é claramente sobre gastos ou receitas
+          const msgLowerQ = msgText.toLowerCase();
+          if (queryType === "SUMMARY") {
+            if (/\b(gastei|gasto|despesa|extrato|saiu|paguei|quanto\s+gast)\b/.test(msgLowerQ))  queryType = "EXPENSES";
+            else if (/\b(recebi|receita|entrou|entrad[ao]|salário|renda|quanto\s+recebi)\b/.test(msgLowerQ)) queryType = "INCOMES";
+          }
 
           // Resolução de período
           let dateFilter = { gte: firstDayMonth };
