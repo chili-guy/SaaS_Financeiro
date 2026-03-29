@@ -78,6 +78,7 @@ function formatFinanceRecords(records, type = "EXPENSE") {
   let reply = type === "EXPENSE" ? "📉 EXTRATO DE GASTOS" : "📈 EXTRATO DE RECEITAS";
   reply += "\n━━━━━━━━━━━━━━━━━━\n\n";
 
+  let globalIdx = 1;
   for (const [cat, data] of sorted) {
     const emoji = catEmojis[cat] || (type === "EXPENSE" ? "📦" : "💵");
     const pct = totalAll > 0 ? ((data.total / totalAll) * 100).toFixed(0) : 0;
@@ -85,7 +86,8 @@ function formatFinanceRecords(records, type = "EXPENSE") {
     data.items.forEach(i => {
       const d = new Date(i.date || new Date());
       const dStr = d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" });
-      reply += `▫️ R$ ${i.amount.toFixed(2)} — ${i.description} (${dStr})\n`;
+      reply += `${globalIdx}. R$ ${i.amount.toFixed(2)} — ${i.description} (${dStr})\n`;
+      globalIdx++;
     });
     reply += `└─ Subtotal: R$ ${data.total.toFixed(2)}\n\n`;
   }
@@ -337,7 +339,13 @@ independente do vocabulário que usar.
 
 === REGRAS CRÍTICAS ===
 
-R0. PERGUNTAS RETÓRICAS / NEGAÇÕES nunca geram TASK:
+R0. REFERÊNCIAS NUMÉRICAS: listas exibidas têm numeração global (1, 2, 3...).
+    Quando o usuário referenciar "o item 2", "o número 3", "o primeiro", "o último", use o histórico da conversa
+    para identificar a descrição/título correspondente ao número e use-o como target na action.
+    Exemplos: "apaga o 2" → DELETE com target = descrição do item 2 da última lista mostrada
+    "muda a categoria do 1 para Transporte" → UPDATE com target = descrição do item 1
+
+R0b. PERGUNTAS RETÓRICAS / NEGAÇÕES nunca geram TASK:
     "não fiz nada hoje?" / "não tenho nada?" / "não tem nada pra fazer?" / "o que eu fiz?"
     Essas são perguntas — responda com texto, nunca crie uma tarefa.
     TASK só é criado quando o usuário AFIRMA que quer registrar algo: "cinema amanhã 20h", "dentista sexta".
@@ -962,13 +970,14 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
             });
             if (list.length > 0) {
               queryResult = `📅 SUA AGENDA\n━━━━━━━━━━━━━━━━━━\n\n`;
-              queryResult += list.map(t => {
-                if (!t.due_date) return `🔔 ${t.title}\n   └─ Sem data definida`;
+              queryResult += list.map((t, idx) => {
+                const num = idx + 1;
+                if (!t.due_date) return `${num}. 🔔 ${t.title}\n   └─ Sem horário definido`;
                 const dStr = new Date(t.due_date).toLocaleString("pt-BR", {
                   timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit",
                   hour: "2-digit", minute: "2-digit"
                 });
-                return `🔔 ${t.title}\n   └─ ⏰ ${dStr}`;
+                return `${num}. 🔔 ${t.title}\n   └─ ⏰ ${dStr}`;
               }).join("\n\n");
               queryResult += `\n\n━━━━━━━━━━━━━━━━━━\nTotal: ${list.length} tarefa(s) pendente(s)`;
             } else {
