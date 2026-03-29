@@ -316,7 +316,19 @@ independente do vocabulário que usar.
    "tira aquela tarefa de academia" → type: TASKS, target: "academia" | "zera tudo" → type: ALL
    → { "action": "DELETE", "parsedData": { "type": "EXPENSES", "target": "uber" } }
 
-7. SILENCIAR ALARME → action "TOGGLE_ALARM"
+7. ATUALIZAR GASTO/RECEITA → action "UPDATE"
+   INTENÇÃO: usuário quer alterar categoria, data, valor ou descrição de um gasto ou receita existente.
+   Exemplos:
+   "muda a categoria do uber para Transporte" → type: EXPENSE, target: "uber", field: "category", value: "Transporte"
+   "corrige a data do cinema para ontem" → type: EXPENSE, target: "cinema", field: "date", value: "ONTEM"
+   "muda todos os gastos para ontem" → type: EXPENSE, target: "TODOS", field: "date", value: "ONTEM"
+   "muda o valor do mercado para 150" → type: EXPENSE, target: "mercado", field: "amount", value: 150
+   "renomeia o gasto 'comida' para 'almoço'" → type: EXPENSE, target: "comida", field: "description", value: "almoço"
+   → { "action": "UPDATE", "parsedData": { "type": "EXPENSE", "target": "uber", "field": "category", "value": "Transporte" } }
+   REGRA: Use target "TODOS" apenas quando o usuário pedir para alterar TODOS os registros de um tipo.
+   REGRA: Para datas relativas use: "HOJE", "ONTEM", "ANTEONTEM" — não tente calcular a data ISO.
+
+8. SILENCIAR ALARME → action "TOGGLE_ALARM"
    INTENÇÃO: usuário quer desativar, silenciar ou cancelar o lembrete de uma tarefa.
    REGRA: Se sem tarefa específica, use o histórico para identificar a tarefa mais recente.
    Só use target "todos" se o usuário pedir explicitamente para todas as tarefas.
@@ -1026,6 +1038,66 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
           } else {
             console.log(`[${remoteJid}] ⚠️ Tarefa para DONE não encontrada: "${taskName}"`);
             aiResponse.reply = `Não encontrei nenhuma tarefa pendente com esse nome. Deseja ver sua agenda completa?`;
+          }
+        }
+
+        // ── UPDATE ───────────────────────────────────────────────────────────
+        else if (action === "UPDATE") {
+          const updType   = (parsedData.type  || "EXPENSE").toUpperCase();
+          const target    = (parsedData.target || "").toLowerCase().trim();
+          const field     = (parsedData.field  || "").toLowerCase();
+          const rawValue  = parsedData.value;
+          const model     = updType === "INCOME" ? prisma.income : prisma.expense;
+          const label     = updType === "INCOME" ? "Receita" : "Gasto";
+          const isBulk    = !target || ["todos","all","tudo","todas"].includes(target);
+
+          // Monta o dado a atualizar
+          let updateData = {};
+          if (field === "category") {
+            updateData.category = String(rawValue).trim();
+          } else if (field === "date") {
+            const rv = String(rawValue).trim().toUpperCase();
+            const t  = new Date();
+            let nd;
+            if (rv === "HOJE" || rv === "TODAY") {
+              nd = new Date(t.getFullYear(), t.getMonth(), t.getDate(), 12, 0, 0);
+            } else if (rv === "ONTEM") {
+              nd = new Date(t); nd.setDate(t.getDate() - 1); nd.setHours(12, 0, 0, 0);
+            } else if (rv === "ANTEONTEM") {
+              nd = new Date(t); nd.setDate(t.getDate() - 2); nd.setHours(12, 0, 0, 0);
+            } else {
+              const s = rv.replace(/Z$/i, "");
+              nd = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s);
+            }
+            if (nd && !isNaN(nd.getTime())) updateData.date = nd;
+          } else if (field === "amount") {
+            const v = parseFloat(String(rawValue).replace(',', '.'));
+            if (v > 0) updateData.amount = v;
+          } else if (field === "description") {
+            updateData.description = String(rawValue).trim();
+          }
+
+          if (Object.keys(updateData).length === 0) {
+            console.warn(`[${remoteJid}] ⚠️ UPDATE ignorado: campo/valor inválido (field=${field}, value=${rawValue})`);
+          } else if (isBulk) {
+            const result = await model.updateMany({ where: { user_id: user.id }, data: updateData });
+            const newVal = field === "date" ? updateData.date?.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : rawValue;
+            aiResponse.reply = `✅ ${result.count} registro(s) atualizado(s)!\n🏷️ ${field} → ${newVal}`;
+            hasChange = true;
+          } else {
+            const record = await model.findFirst({
+              where: { user_id: user.id, description: { contains: target, mode: 'insensitive' } },
+              orderBy: { date: 'desc' }
+            });
+            if (record) {
+              await model.update({ where: { id: record.id }, data: updateData });
+              const newVal = field === "date" ? updateData.date?.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : rawValue;
+              const fieldLabel = { category: "Categoria", date: "Data", amount: "Valor", description: "Descrição" }[field] || field;
+              aiResponse.reply = `✅ ${label} atualizado!\n📝 ${record.description}\n🏷️ ${fieldLabel}: ${newVal}`;
+              hasChange = true;
+            } else {
+              aiResponse.reply = `Não encontrei nenhum registro com a descrição "${target}". Confira o nome exato e tente novamente.`;
+            }
           }
         }
 
