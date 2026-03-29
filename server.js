@@ -115,11 +115,12 @@ function cleanTitle(title) {
     .replace(/^\w/, (c) => c.toUpperCase());
 }
 
-function formatFinanceRecords(records, type = "EXPENSE") {
+function formatFinanceRecords(records, type = "EXPENSE", periodLabel = "") {
   if (!records || !records.length) {
+    const period = periodLabel ? ` ${periodLabel}` : " este mês";
     return type === "EXPENSE"
-      ? "Não encontrei registros de gastos este mês. 📂"
-      : "Não encontrei registros de receitas este mês. 📂";
+      ? `Não encontrei registros de gastos${period}. 📂`
+      : `Não encontrei registros de receitas${period}. 📂`;
   }
 
   const catEmojis = {
@@ -825,13 +826,16 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
             // Fallback de descrição: quando AI retorna genérico ("Gasto") extrai da mensagem
             let expDesc = parsedData.description;
             if (!expDesc || /^gasto$/i.test(expDesc.trim())) {
-              // "{desc} {valor}" — ex: "Cinema 42,50"
-              const mBefore = msgText.match(/^([a-zA-ZÀ-ú][a-zA-ZÀ-ú\s]{1,30}?)\s+\d/i);
-              // "{valor} em/de/no/na {desc}" — ex: "19,90 em brincos novos"
-              const mAfter  = msgText.match(/\d[,.]?\d*\s*(?:reais|r\$)?\s+(?:em|de|no|na|nos|nas|do|da)\s+([a-zA-ZÀ-ú][a-zA-ZÀ-ú\s]{1,40}?)(?:\s+(?:ontem|hoje|hj|amanhã|também|tambem)|$)/i);
-              const extracted = (mAfter?.[1] || mBefore?.[1] || "").trim();
+              // Prioridade 1: "{valor} em/de/no/na {desc}" — ex: "19,90 em brincos novos"
+              const mAfter = msgText.match(/\d[,.]?\d*\s*(?:reais|r\$)?\s+(?:em|de|no|na|nos|nas|do|da)\s+([a-zA-ZÀ-ú][a-zA-ZÀ-ú\s]{1,40}?)(?:\s+(?:ontem|hoje|hj|amanhã|também|tambem)|$)/i);
+              // Prioridade 2: "{desc} {verbo?} {valor}" — para antes de verbos de preço e antes do número
+              // ex: "Cinema 42,50", "Lanche no Cinema foi 40" → captura só "Lanche no Cinema"
+              const mBefore = msgText.match(/^([a-zA-ZÀ-ú][a-zA-ZÀ-ú\s]{1,35}?)\s+(?:foi|é|e|eh|era|custa[va]?|saiu|valeu?|ficou|fica|gastei|paguei)?\s*\d/i);
+              let extracted = (mAfter?.[1] || mBefore?.[1] || "").trim()
+                .replace(/\s+(?:foi|é|e|eh|era|custa[va]?|saiu|valeu?|ficou|fica)$/i, "")
+                .replace(/\s+(ontem|hoje|hj|amanhã|também|tambem)$/i, "").trim();
               if (extracted && extracted.length > 1) {
-                expDesc = extracted.replace(/\s+(ontem|hoje|hj|amanhã|também|tambem)$/i, "").trim();
+                expDesc = extracted;
                 console.log(`[${remoteJid}] 📝 Desc fallback EXPENSE: "${expDesc}"`);
               } else {
                 expDesc = "Gasto";
@@ -875,11 +879,11 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
             let incDesc = parsedData.description;
             if (!incDesc || /^receita$/i.test(incDesc.trim())) {
               const mAfter  = msgText.match(/\d[,.]?\d*\s*(?:reais|r\$)?\s+(?:em|de|no|na|nos|nas|do|da)\s+([a-zA-ZÀ-ú][a-zA-ZÀ-ú\s]{1,40}?)(?:\s+(?:ontem|hoje|hj|amanhã|também|tambem)|$)/i);
-              const mBefore = msgText.match(/^([a-zA-ZÀ-ú][a-zA-ZÀ-ú\s]{1,30}?)\s+\d/i);
-              const extracted = (mAfter?.[1] || mBefore?.[1] || "").trim();
-              incDesc = (extracted && extracted.length > 1)
-                ? extracted.replace(/\s+(ontem|hoje|hj|amanhã|também|tambem)$/i, "").trim()
-                : "Receita";
+              const mBefore = msgText.match(/^([a-zA-ZÀ-ú][a-zA-ZÀ-ú\s]{1,35}?)\s+(?:foi|é|e|eh|era|custa[va]?|saiu|valeu?|ficou|fica|recebi|entrou)?\s*\d/i);
+              let extracted = (mAfter?.[1] || mBefore?.[1] || "").trim()
+                .replace(/\s+(?:foi|é|e|eh|era|saiu|valeu?|ficou|fica)$/i, "")
+                .replace(/\s+(ontem|hoje|hj|amanhã|também|tambem)$/i, "").trim();
+              incDesc = (extracted && extracted.length > 1) ? extracted : "Receita";
             }
             const aiIncCat = parsedData.category || "";
             const incCat = (!aiIncCat || /^(renda|outros)$/i.test(aiIncCat))
@@ -1038,6 +1042,7 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
           }
 
           // Fallback semântico de período — se IA não enviou date mas mensagem tem indicador temporal
+          let periodLabel = "";
           if (!parsedData.date && queryType !== "SUMMARY") {
             const t = new Date();
             if (/\b(hoje|hj)\b/i.test(msgText)) {
@@ -1045,24 +1050,28 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
                 gte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 0, 0, 0),
                 lte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59)
               };
+              periodLabel = "hoje";
             } else if (/\bontem\b/i.test(msgText)) {
               const y = new Date(t); y.setDate(t.getDate() - 1);
               dateFilter = {
                 gte: new Date(y.getFullYear(), y.getMonth(), y.getDate(), 0, 0, 0),
                 lte: new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59)
               };
+              periodLabel = "ontem";
             } else if (/\banteontem\b/i.test(msgText)) {
               const y = new Date(t); y.setDate(t.getDate() - 2);
               dateFilter = {
                 gte: new Date(y.getFullYear(), y.getMonth(), y.getDate(), 0, 0, 0),
                 lte: new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59)
               };
+              periodLabel = "anteontem";
             } else if (/\b(essa|esta|nessa|nesta|dessa|desta)\s+semana\b/i.test(msgText)) {
               const dow = t.getDay();
               const daysFromMon = dow === 0 ? 6 : dow - 1;
               const mon = new Date(t); mon.setDate(t.getDate() - daysFromMon); mon.setHours(0, 0, 0, 0);
               const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23, 59, 59, 999);
               dateFilter = { gte: mon, lte: sun };
+              periodLabel = "esta semana";
             } else if (/\b(semana\s+passada|última\s+semana)\b/i.test(msgText)) {
               const dow = t.getDay();
               const daysFromMon = dow === 0 ? 6 : dow - 1;
@@ -1070,6 +1079,7 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
               const lastMon = new Date(thisMon); lastMon.setDate(thisMon.getDate() - 7); lastMon.setHours(0, 0, 0, 0);
               const lastSun = new Date(lastMon); lastSun.setDate(lastMon.getDate() + 6); lastSun.setHours(23, 59, 59, 999);
               dateFilter = { gte: lastMon, lte: lastSun };
+              periodLabel = "na semana passada";
             }
           }
 
@@ -1133,7 +1143,7 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
               cache.expenses = orderedExps;
               lastListCache.set(remoteJid, cache);
             }
-            queryResult = formatFinanceRecords(exps, "EXPENSE");
+            queryResult = formatFinanceRecords(exps, "EXPENSE", periodLabel);
 
           } else if (queryType === "INCOMES") {
             const incs = await prisma.income.findMany({
@@ -1151,7 +1161,7 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
               cache.incomes = orderedIncs;
               lastListCache.set(remoteJid, cache);
             }
-            queryResult = formatFinanceRecords(incs, "INCOME");
+            queryResult = formatFinanceRecords(incs, "INCOME", periodLabel);
 
           } else { // SUMMARY
             const [tasks, eAgg, iAgg] = await Promise.all([
