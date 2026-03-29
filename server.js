@@ -468,10 +468,12 @@ independente do vocabulário que usar.
 === REGRAS CRÍTICAS ===
 
 R0. REFERÊNCIAS NUMÉRICAS: listas exibidas têm numeração global (1, 2, 3...).
-    Quando o usuário referenciar "o item 2", "o número 3", "o primeiro", "o último", use o histórico da conversa
-    para identificar a descrição/título correspondente ao número e use-o como target na action.
-    Exemplos: "apaga o 2" → DELETE com target = descrição do item 2 da última lista mostrada
-    "muda a categoria do 1 para Transporte" → UPDATE com target = descrição do item 1
+    Quando o usuário referenciar "o item 2", "o número 3", "o 1", "o último" etc., passe o NÚMERO EXATO como target.
+    O sistema identifica o item automaticamente pela posição na última lista exibida.
+    NUNCA tente resolver o número para uma descrição — passe o número direto.
+    Exemplos: "apaga o 2" → DELETE com target: "2"
+    "muda a categoria do 1 para Transporte" → UPDATE com target: "1"
+    "muda a descrição do 3 para Academia" → UPDATE com target: "3", field: "description", value: "Academia"
 
 R0b. PERGUNTAS RETÓRICAS / NEGAÇÕES nunca geram TASK:
     "não fiz nada hoje?" / "não tenho nada?" / "não tem nada pra fazer?" / "o que eu fiz?"
@@ -518,6 +520,8 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
     PROIBIDO: escrever "receita registrada" sem action INCOME em "actions".
     PROIBIDO: escrever "gasto registrado" sem action EXPENSE em "actions".
     PROIBIDO: escrever "tarefa registrada" ou "lembrete criado" sem action TASK em "actions".
+    PROIBIDO: escrever "atualizado", "alterado", "corrigido", "renomeado" ou qualquer confirmação de edição sem action UPDATE em "actions".
+    PROIBIDO: escrever "apagado", "deletado", "removido" ou qualquer confirmação de exclusão sem action DELETE em "actions".
     Se o dado já existia no contexto, registre-o igualmente — o sistema lida com duplicatas automaticamente.`;
 
     // ─── Chamada IA ────────────────────────────────────────────────────────────
