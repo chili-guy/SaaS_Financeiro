@@ -72,6 +72,30 @@ function sanitizeText(str) {
   return str.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "");
 }
 
+// Infere categoria de gasto/receita a partir do texto — usado como fallback quando AI retorna "Outros"
+function inferCategory(text) {
+  const t = (text || "").toLowerCase();
+  if (/\b(uber|taxi|táxi|99|ônibus|metrô|metro|trem|combustível|gasolina|estacionamento|passagem|transporte)\b/.test(t))
+    return "Transporte";
+  if (/\b(mercado|supermercado|feira|hortifruti|sacolão|açougue|padaria|compras\s+de\s+casa)\b/.test(t))
+    return "Mercado";
+  if (/\b(restaurante|almoço|almoco|jantar|lanche|pizza|hamburguer|hambúrguer|comida|refeição|refeicao|café|cafeteria|delivery|ifood|rappi)\b/.test(t))
+    return "Alimentação";
+  if (/\b(cinema|teatro|show|ingresso|netflix|spotify|disney|prime|hbo|streaming|jogo|game|clube)\b/.test(t))
+    return "Lazer";
+  if (/\b(farmácia|farmacia|remédio|remedio|médico|medico|consulta|exame|plano\s+de\s+saúde|dentista|hospital|cirurgia)\b/.test(t))
+    return "Saúde";
+  if (/\b(faculdade|escola|curso|livro|material|mensalidade\s+escolar|educação|educacao)\b/.test(t))
+    return "Educação";
+  if (/\b(aluguel|condomínio|condominio|luz|energia|água|agua|gás|gas|internet|conta\s+de|boleto)\b/.test(t))
+    return "Moradia";
+  if (/\b(roupa|sapato|sapatos|calçado|calcado|brincos?|colar|pulseira|bolsa|maquiagem|perfume|salão|salao|cabelo|manicure)\b/.test(t))
+    return "Cuidados Pessoais";
+  if (/\b(celular|telefone|plano|assinatura|mensalidade|seguro)\b/.test(t))
+    return "Serviços";
+  return null; // não inferiu — mantém o que veio da AI
+}
+
 function cleanTitle(title) {
   if (!title) return "";
   return title
@@ -802,7 +826,11 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
                 expDesc = "Gasto";
               }
             }
-            const expCat  = parsedData.category  || "Outros";
+            // Infere categoria quando AI retornou "Outros" ou vazio
+            const aiCat = parsedData.category || "";
+            const expCat = (!aiCat || /^outros$/i.test(aiCat))
+              ? (inferCategory(expDesc) || inferCategory(msgText) || "Outros")
+              : aiCat;
             await prisma.expense.create({
               data: { user_id: user.id, amount: val, description: expDesc, category: expCat, date: expDate }
             });
@@ -842,7 +870,10 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
                 ? extracted.replace(/\s+(ontem|hoje|hj|amanhã|também|tambem)$/i, "").trim()
                 : "Receita";
             }
-            const incCat  = parsedData.category  || "Renda";
+            const aiIncCat = parsedData.category || "";
+            const incCat = (!aiIncCat || /^(renda|outros)$/i.test(aiIncCat))
+              ? (inferCategory(incDesc) || inferCategory(msgText) || "Renda")
+              : aiIncCat;
             await prisma.income.create({
               data: { user_id: user.id, amount: val, description: incDesc, category: incCat, date: incDate }
             });
