@@ -72,6 +72,58 @@ function sanitizeText(str) {
   return str.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "");
 }
 
+// Extrai data a partir de expressões temporais na mensagem — retorna string "YYYY-MM-DD" ou null
+function extractDateFromMsg(msgText) {
+  const t = new Date();
+  const txt = (msgText || "").toLowerCase();
+
+  if (/\b(hoje|hj)\b/.test(txt)) {
+    return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  }
+  if (/\bontem\b/.test(txt)) {
+    const y = new Date(t); y.setDate(t.getDate() - 1);
+    return `${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,'0')}-${String(y.getDate()).padStart(2,'0')}`;
+  }
+  if (/\banteontem\b/.test(txt)) {
+    const y = new Date(t); y.setDate(t.getDate() - 2);
+    return `${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,'0')}-${String(y.getDate()).padStart(2,'0')}`;
+  }
+
+  // Dias da semana — retrocede ao dia mais recente que corresponde
+  const dowNames = { "domingo":0,"segunda":1,"terca":1,"terça":1,"quarta":3,"quinta":4,"sexta":5,"sabado":6,"sábado":6 };
+  // Alias completos
+  const aliases = { "segunda-feira":1,"terça-feira":2,"terca-feira":2,"quarta-feira":3,"quinta-feira":4,"sexta-feira":5,"sábado":6,"sabado":6,"domingo":0 };
+  for (const [name, dow] of Object.entries(aliases)) {
+    if (txt.includes(name)) {
+      const cur = t.getDay();
+      let diff = cur - dow;
+      if (diff <= 0) diff += 7; // vai para a semana anterior se for hoje ou futuro
+      const d = new Date(t); d.setDate(t.getDate() - diff);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+  }
+  // Alias curtos (sem o "-feira") — só se o alias completo não bateu
+  for (const [name, dow] of Object.entries(dowNames)) {
+    if (new RegExp(`\\b${name}\\b`).test(txt)) {
+      const cur = t.getDay();
+      let diff = cur - dow;
+      if (diff <= 0) diff += 7;
+      const d = new Date(t); d.setDate(t.getDate() - diff);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+  }
+  return null;
+}
+
+// Limpa descrição extraída: remove artigos iniciais e cláusulas relativas finais
+function cleanExtractedDesc(text) {
+  return (text || "")
+    .replace(/^(um|uma|o|a|os|as|meu|minha|meus|minhas|seu|sua|seus|suas|esse|essa|este|esta)\s+/i, "")
+    .replace(/\s+que\s+\w.*$/i, "")   // remove "que fiz", "que eu fiz", "que realizei"
+    .replace(/\s+(ontem|hoje|hj|amanhã|tambem|também|passad[ao])$/i, "")
+    .trim();
+}
+
 // Infere categoria de gasto/receita a partir do texto — usado como fallback quando AI retorna "Outros"
 function inferCategory(text) {
   const t = (text || "").toLowerCase()
@@ -103,6 +155,16 @@ function inferCategory(text) {
 
   if (/\b(celular|smartphone|iphone|samsung|motorola|xiaomi|tablet|ipad|notebook|computador|pc|monitor|impressora|fone|headphone|earphone|carregador|cabo|mouse|teclado|pendrive|hd|ssd|camera|câmera|tv|televisao|televisão|eletronico|eletrônico|gadget|plano.?(celular|mensal|dados)|tim|claro|vivo|oi|nextel|internet.?movel|internet.?móvel|chip|recarga|mensalidade|assinatura|seguro|seguros|seguro.?(auto|carro|vida|residencial|saude)|previdencia|previdência|consorcio|consórcio|financiamento|emprestimo|empréstimo|prestacao|prestação|parcela|divida|dívida|fatura|boleto|conta.?(telefone|celular|luz|agua|gas)|tributo|taxa|multa|imposto|ir|irpf|inss|fgts|servico|serviço|manutencao|manutenção|assistencia|assistência.?tecnica|tecnica)\b/.test(t))
     return "Serviços";
+
+  // Receitas — categorias específicas de renda
+  if (/\b(salario|salário|contra.?cheque|holerite|vencimento|remuneracao|remuneração|13°?|decimo.?terceiro|ferias|férias|bonus|bônus|ppr|plr|participacao.?lucros)\b/.test(t))
+    return "Salário";
+  if (/\b(freelance|freelancer|freela|freelas|job|trampo|bico|projeto|cliente|contrato|prestacao.?servico|prestação.?serviço|honorario|honorário|consultoria|renda.?extra|trabalho.?extra|autonomo|autônomo|mei|nota.?fiscal|nf)\b/.test(t))
+    return "Freelance";
+  if (/\b(venda|vendeu|vendendo|vendas|produto.?vendido|marketplace|mercado.?livre|shopee|amazon|magalu|enjoei|olx|revendeu|revendendo)\b/.test(t))
+    return "Vendas";
+  if (/\b(aluguel.?recebido|receita.?aluguel|locacao|locação|inquilino|imóvel.?alugado|renda.?passiva)\b/.test(t))
+    return "Renda";
 
   return null; // não inferiu — mantém o que veio da AI
 }
@@ -807,18 +869,8 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
         if (action === "EXPENSE") {
           const val = parseFloat(String(parsedData.amount || 0).replace(',', '.').replace(/[^\d.]/g, ''));
           if (val > 0) {
-            // Fallback de data: se AI não enviou mas mensagem tem indicador temporal
-            let expDateRaw = parsedData.date;
-            if (!expDateRaw) {
-              const t = new Date();
-              if (/\bontem\b/i.test(msgText)) {
-                const y = new Date(t); y.setDate(t.getDate() - 1);
-                expDateRaw = `${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,'0')}-${String(y.getDate()).padStart(2,'0')}`;
-              } else if (/\banteontem\b/i.test(msgText)) {
-                const y = new Date(t); y.setDate(t.getDate() - 2);
-                expDateRaw = `${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,'0')}-${String(y.getDate()).padStart(2,'0')}`;
-              }
-            }
+            // Fallback de data: se AI não enviou mas mensagem tem indicador temporal (ontem, quinta-feira, etc.)
+            const expDateRaw = parsedData.date || extractDateFromMsg(msgText);
             const expDate = expDateRaw
               ? (() => { const s = String(expDateRaw).replace(/Z$/i, ""); return new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s); })()
               : new Date();
@@ -831,9 +883,7 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
               // Prioridade 2: "{desc} {verbo?} {valor}" — para antes de verbos de preço e antes do número
               // ex: "Cinema 42,50", "Lanche no Cinema foi 40" → captura só "Lanche no Cinema"
               const mBefore = msgText.match(/^([a-zA-ZÀ-ú][a-zA-ZÀ-ú\s]{1,35}?)\s+(?:foi|é|e|eh|era|custa[va]?|saiu|valeu?|ficou|fica|gastei|paguei)?\s*\d/i);
-              let extracted = (mAfter?.[1] || mBefore?.[1] || "").trim()
-                .replace(/\s+(?:foi|é|e|eh|era|custa[va]?|saiu|valeu?|ficou|fica)$/i, "")
-                .replace(/\s+(ontem|hoje|hj|amanhã|também|tambem)$/i, "").trim();
+              const extracted = cleanExtractedDesc(mAfter?.[1] || mBefore?.[1] || "");
               if (extracted && extracted.length > 1) {
                 expDesc = extracted;
                 console.log(`[${remoteJid}] 📝 Desc fallback EXPENSE: "${expDesc}"`);
@@ -861,17 +911,7 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
         else if (action === "INCOME") {
           const val = parseFloat(String(parsedData.amount || 0).replace(',', '.').replace(/[^\d.]/g, ''));
           if (val > 0) {
-            let incDateRaw = parsedData.date;
-            if (!incDateRaw) {
-              const t = new Date();
-              if (/\bontem\b/i.test(msgText)) {
-                const y = new Date(t); y.setDate(t.getDate() - 1);
-                incDateRaw = `${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,'0')}-${String(y.getDate()).padStart(2,'0')}`;
-              } else if (/\banteontem\b/i.test(msgText)) {
-                const y = new Date(t); y.setDate(t.getDate() - 2);
-                incDateRaw = `${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,'0')}-${String(y.getDate()).padStart(2,'0')}`;
-              }
-            }
+            const incDateRaw = parsedData.date || extractDateFromMsg(msgText);
             const incDate = incDateRaw
               ? (() => { const s = String(incDateRaw).replace(/Z$/i, ""); return new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s); })()
               : new Date();
@@ -880,9 +920,7 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
             if (!incDesc || /^receita$/i.test(incDesc.trim())) {
               const mAfter  = msgText.match(/\d[,.]?\d*\s*(?:reais|r\$)?\s+(?:em|de|no|na|nos|nas|do|da)\s+([a-zA-ZÀ-ú][a-zA-ZÀ-ú\s]{1,40}?)(?:\s+(?:ontem|hoje|hj|amanhã|também|tambem)|$)/i);
               const mBefore = msgText.match(/^([a-zA-ZÀ-ú][a-zA-ZÀ-ú\s]{1,35}?)\s+(?:foi|é|e|eh|era|custa[va]?|saiu|valeu?|ficou|fica|recebi|entrou)?\s*\d/i);
-              let extracted = (mAfter?.[1] || mBefore?.[1] || "").trim()
-                .replace(/\s+(?:foi|é|e|eh|era|saiu|valeu?|ficou|fica)$/i, "")
-                .replace(/\s+(ontem|hoje|hj|amanhã|também|tambem)$/i, "").trim();
+              const extracted = cleanExtractedDesc(mAfter?.[1] || mBefore?.[1] || "");
               incDesc = (extracted && extracted.length > 1) ? extracted : "Receita";
             }
             const aiIncCat = parsedData.category || "";
