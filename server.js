@@ -29,6 +29,36 @@ const processedIds = new Set();
 const userLocks = new Set();
 const DEBOUNCE_TIME = 4000; // 4s — agrupa mensagens rápidas em uma única chamada à IA
 
+// Cache da última lista numerada exibida por usuário — permite referenciar "item 2", "o 3", etc.
+// Estrutura: { expenses: [{id, description, amount, category, date}], incomes: [...], tasks: [{id, title}] }
+const lastListCache = new Map();
+
+// Resolve uma referência numérica ("2", "item 3", "o primeiro") para o id/descrição real do cache
+function resolveNumericRef(target, cacheEntry) {
+  if (!cacheEntry) return null;
+  const t = String(target).toLowerCase().trim();
+  const num = t === "primeiro" || t === "1" ? 1
+            : t === "último" || t === "ultimo" ? null  // null = last
+            : parseInt(t.replace(/\D/g, ""), 10);
+  if (isNaN(num) && num !== null) return null;
+
+  // Tenta nas listas na ordem: expenses > incomes > tasks
+  const lists = [
+    { key: "expenses", items: cacheEntry.expenses },
+    { key: "incomes",  items: cacheEntry.incomes },
+    { key: "tasks",    items: cacheEntry.tasks },
+  ];
+  for (const { key, items } of lists) {
+    if (!items?.length) continue;
+    const idx = num === null ? items.length - 1 : num - 1;
+    if (idx >= 0 && idx < items.length) {
+      const item = items[idx];
+      return { listType: key, item, idx };
+    }
+  }
+  return null;
+}
+
 // Rate limit global DeepSeek: garante mínimo de 2s entre chamadas consecutivas
 let lastDeepSeekCall = 0;
 const MIN_CALL_GAP_MS = 3500;
@@ -865,6 +895,8 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
               queryType = "INCOMES";
             else if (/\b(agenda|tarefas?|atividades?|compromissos?|afazeres?|o\s+que\s+(eu\s+)?(fiz|tenho|tem)|minha\s+lista)\b/.test(msgLowerQ))
               queryType = "TASKS";
+            else if (/^(liste?|extrato|listagem|mostre?|exibe?|mostra|ver)\s*$|^(liste?|mostre?|exibe?)\s+(tudo|tudo|os\s+gastos?|os\s+registros?|meus\s+gastos?|minhas\s+receitas?|meu\s+extrato)\s*$/i.test(msgLowerQ))
+              queryType = "EXPENSES"; // "liste", "extrato", "ver" sem qualificador → mostra gastos
           }
 
           // Override contextual: "e dessa semana?" / "e na sexta?" é follow-up — herda tipo da última consulta
@@ -969,6 +1001,11 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
               orderBy: { due_date: 'asc' }
             });
             if (list.length > 0) {
+              // Salva lista no cache
+              const cache = lastListCache.get(remoteJid) || {};
+              cache.tasks = list;
+              lastListCache.set(remoteJid, cache);
+
               queryResult = `📅 SUA AGENDA\n━━━━━━━━━━━━━━━━━━\n\n`;
               queryResult += list.map((t, idx) => {
                 const num = idx + 1;
@@ -996,6 +1033,17 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
               orderBy: { date: 'desc' },
               take: 50
             });
+            // Salva lista no cache na mesma ordem exibida em formatFinanceRecords (por categoria total desc)
+            {
+              const grps = {};
+              exps.forEach(r => { const c = r.category || "Outros"; if (!grps[c]) grps[c] = []; grps[c].push(r); });
+              const totals = {};
+              Object.entries(grps).forEach(([c, items]) => { totals[c] = items.reduce((s, i) => s + i.amount, 0); });
+              const orderedExps = Object.keys(grps).sort((a, b) => totals[b] - totals[a]).flatMap(c => grps[c]);
+              const cache = lastListCache.get(remoteJid) || {};
+              cache.expenses = orderedExps;
+              lastListCache.set(remoteJid, cache);
+            }
             queryResult = formatFinanceRecords(exps, "EXPENSE");
 
           } else if (queryType === "INCOMES") {
@@ -1004,6 +1052,16 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
               orderBy: { date: 'desc' },
               take: 50
             });
+            {
+              const grps = {};
+              incs.forEach(r => { const c = r.category || "Renda"; if (!grps[c]) grps[c] = []; grps[c].push(r); });
+              const totals = {};
+              Object.entries(grps).forEach(([c, items]) => { totals[c] = items.reduce((s, i) => s + i.amount, 0); });
+              const orderedIncs = Object.keys(grps).sort((a, b) => totals[b] - totals[a]).flatMap(c => grps[c]);
+              const cache = lastListCache.get(remoteJid) || {};
+              cache.incomes = orderedIncs;
+              lastListCache.set(remoteJid, cache);
+            }
             queryResult = formatFinanceRecords(incs, "INCOME");
 
           } else { // SUMMARY
@@ -1052,13 +1110,24 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
 
         // ── UPDATE ───────────────────────────────────────────────────────────
         else if (action === "UPDATE") {
-          const updType   = (parsedData.type  || "EXPENSE").toUpperCase();
-          const target    = (parsedData.target || "").toLowerCase().trim();
+          let updType   = (parsedData.type  || "EXPENSE").toUpperCase();
+          let target    = (parsedData.target || "").toLowerCase().trim();
           const field     = (parsedData.field  || "").toLowerCase();
           const rawValue  = parsedData.value;
+          const isBulk    = !target || ["todos","all","tudo","todas"].includes(target);
+
+          // Resolve referência numérica ("2", "item 3") para id real do cache
+          if (!isBulk && /^\d+$/.test(target.replace(/\D/g, "")) && /\d/.test(target)) {
+            const resolved = resolveNumericRef(target, lastListCache.get(remoteJid));
+            if (resolved) {
+              if (resolved.listType === "expenses") { updType = "EXPENSE"; target = resolved.item.description.toLowerCase(); }
+              else if (resolved.listType === "incomes") { updType = "INCOME"; target = resolved.item.description.toLowerCase(); }
+              console.log(`[${remoteJid}] 🔢 UPDATE numérico resolvido: "${target}" (${resolved.listType})`);
+            }
+          }
+
           const model     = updType === "INCOME" ? prisma.income : prisma.expense;
           const label     = updType === "INCOME" ? "Receita" : "Gasto";
-          const isBulk    = !target || ["todos","all","tudo","todas"].includes(target);
 
           // Monta o dado a atualizar
           let updateData = {};
@@ -1122,14 +1191,31 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
             "meus", "minhas", "meu", "minha", "os", "as",
             "gastos", "despesas", "receitas", "tarefas", "compromissos", "registros"
           ];
-          const target = genericTargets.includes(rawTarget) ? "" : rawTarget;
+          let target = genericTargets.includes(rawTarget) ? "" : rawTarget;
 
           // Se a IA retornou type=ALL mas a mensagem menciona tipo específico, corrige para o tipo certo
           let effectiveDelType = delType;
           if (delType === "ALL") {
-            if (rawLower.match(/\b(gastos?|despesas?)\b/))       effectiveDelType = "EXPENSES";
-            else if (rawLower.match(/\b(receitas?|renda)\b/))    effectiveDelType = "INCOMES";
+            if (rawLower.match(/\b(gastos?|despesas?)\b/))           effectiveDelType = "EXPENSES";
+            else if (rawLower.match(/\b(receitas?|renda)\b/))        effectiveDelType = "INCOMES";
             else if (rawLower.match(/\b(tarefas?|compromissos?)\b/)) effectiveDelType = "TASKS";
+          }
+
+          // Resolve referência numérica ("delete o 2") para descrição real do cache
+          if (target && /\d/.test(target)) {
+            const numOnly = target.replace(/\D/g, "");
+            if (numOnly) {
+              const resolved = resolveNumericRef(numOnly, lastListCache.get(remoteJid));
+              if (resolved) {
+                target = resolved.listType === "tasks" ? resolved.item.title.toLowerCase() : resolved.item.description.toLowerCase();
+                if (effectiveDelType === "ALL" || effectiveDelType === delType) {
+                  if (resolved.listType === "expenses") effectiveDelType = "EXPENSES";
+                  else if (resolved.listType === "incomes") effectiveDelType = "INCOMES";
+                  else if (resolved.listType === "tasks")   effectiveDelType = "TASKS";
+                }
+                console.log(`[${remoteJid}] 🔢 DELETE numérico resolvido: "${target}" (${resolved.listType})`);
+              }
+            }
           }
 
           // Reset total: só se sem tipo específico na mensagem E sem keyword de tipo
