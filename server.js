@@ -1253,13 +1253,39 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
           const rawValue  = parsedData.value;
           const isBulk    = !target || ["todos","all","tudo","todas"].includes(target);
 
-          // Resolve referência numérica ("2", "item 3") para id real do cache
-          if (!isBulk && /^\d+$/.test(target.replace(/\D/g, "")) && /\d/.test(target)) {
-            const resolved = resolveNumericRef(target, lastListCache.get(remoteJid));
-            if (resolved) {
-              if (resolved.listType === "expenses") { updType = "EXPENSE"; target = resolved.item.description.toLowerCase(); }
-              else if (resolved.listType === "incomes") { updType = "INCOME"; target = resolved.item.description.toLowerCase(); }
-              console.log(`[${remoteJid}] 🔢 UPDATE numérico resolvido: "${target}" (${resolved.listType})`);
+          // Resolve referência numérica ("2", "item 3") para id real
+          if (!isBulk && /\d/.test(target)) {
+            const numStr = target.replace(/\D/g, "");
+            if (numStr) {
+              // 1º: tenta pelo cache (mais rápido, preserva ordem da tela)
+              let resolved = resolveNumericRef(numStr, lastListCache.get(remoteJid));
+
+              // 2º: fallback ao banco se cache vazio — busca gastos/receitas ordenados igual à tela
+              if (!resolved) {
+                const fallbackExps = await prisma.expense.findMany({
+                  where: { user_id: user.id },
+                  orderBy: { date: 'desc' },
+                  take: 50
+                });
+                // Replica ordenação por categoria (total desc), igual ao formatFinanceRecords
+                const grps = {}; fallbackExps.forEach(r => { const c = r.category||"Outros"; if(!grps[c]) grps[c]=[]; grps[c].push(r); });
+                const tots = {}; Object.entries(grps).forEach(([c,items])=>{ tots[c]=items.reduce((s,i)=>s+i.amount,0); });
+                const ordered = Object.keys(grps).sort((a,b)=>tots[b]-tots[a]).flatMap(c=>grps[c]);
+                const idx = parseInt(numStr, 10) - 1;
+                if (idx >= 0 && idx < ordered.length) {
+                  resolved = { listType: "expenses", item: ordered[idx], idx };
+                  // Repopula o cache para o próximo uso
+                  const c = lastListCache.get(remoteJid) || {};
+                  c.expenses = ordered;
+                  lastListCache.set(remoteJid, c);
+                }
+              }
+
+              if (resolved) {
+                if (resolved.listType === "expenses") { updType = "EXPENSE"; target = resolved.item.description.toLowerCase(); }
+                else if (resolved.listType === "incomes") { updType = "INCOME"; target = resolved.item.description.toLowerCase(); }
+                console.log(`[${remoteJid}] 🔢 UPDATE numérico resolvido: "${target}" (${resolved.listType})`);
+              }
             }
           }
 
@@ -1342,7 +1368,21 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
           if (target && /\d/.test(target)) {
             const numOnly = target.replace(/\D/g, "");
             if (numOnly) {
-              const resolved = resolveNumericRef(numOnly, lastListCache.get(remoteJid));
+              let resolved = resolveNumericRef(numOnly, lastListCache.get(remoteJid));
+
+              // Fallback ao banco se cache vazio
+              if (!resolved) {
+                const fallbackExps = await prisma.expense.findMany({ where: { user_id: user.id }, orderBy: { date: 'desc' }, take: 50 });
+                const grps = {}; fallbackExps.forEach(r => { const c = r.category||"Outros"; if(!grps[c]) grps[c]=[]; grps[c].push(r); });
+                const tots = {}; Object.entries(grps).forEach(([c,items])=>{ tots[c]=items.reduce((s,i)=>s+i.amount,0); });
+                const ordered = Object.keys(grps).sort((a,b)=>tots[b]-tots[a]).flatMap(c=>grps[c]);
+                const idx = parseInt(numOnly, 10) - 1;
+                if (idx >= 0 && idx < ordered.length) {
+                  resolved = { listType: "expenses", item: ordered[idx], idx };
+                  const c = lastListCache.get(remoteJid) || {}; c.expenses = ordered; lastListCache.set(remoteJid, c);
+                }
+              }
+
               if (resolved) {
                 target = resolved.listType === "tasks" ? resolved.item.title.toLowerCase() : resolved.item.description.toLowerCase();
                 if (effectiveDelType === "ALL" || effectiveDelType === delType) {
