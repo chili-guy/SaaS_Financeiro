@@ -771,10 +771,37 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
         if (action === "EXPENSE") {
           const val = parseFloat(String(parsedData.amount || 0).replace(',', '.').replace(/[^\d.]/g, ''));
           if (val > 0) {
-            const expDate = parsedData.date
-              ? (() => { const s = String(parsedData.date).replace(/Z$/i, ""); return new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s); })()
+            // Fallback de data: se AI não enviou mas mensagem tem indicador temporal
+            let expDateRaw = parsedData.date;
+            if (!expDateRaw) {
+              const t = new Date();
+              if (/\bontem\b/i.test(msgText)) {
+                const y = new Date(t); y.setDate(t.getDate() - 1);
+                expDateRaw = `${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,'0')}-${String(y.getDate()).padStart(2,'0')}`;
+              } else if (/\banteontem\b/i.test(msgText)) {
+                const y = new Date(t); y.setDate(t.getDate() - 2);
+                expDateRaw = `${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,'0')}-${String(y.getDate()).padStart(2,'0')}`;
+              }
+            }
+            const expDate = expDateRaw
+              ? (() => { const s = String(expDateRaw).replace(/Z$/i, ""); return new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s); })()
               : new Date();
-            const expDesc = parsedData.description || "Gasto";
+
+            // Fallback de descrição: quando AI retorna genérico ("Gasto") extrai da mensagem
+            let expDesc = parsedData.description;
+            if (!expDesc || /^gasto$/i.test(expDesc.trim())) {
+              // "{desc} {valor}" — ex: "Cinema 42,50"
+              const mBefore = msgText.match(/^([a-zA-ZÀ-ú][a-zA-ZÀ-ú\s]{1,30}?)\s+\d/i);
+              // "{valor} em/de/no/na {desc}" — ex: "19,90 em brincos novos"
+              const mAfter  = msgText.match(/\d[,.]?\d*\s*(?:reais|r\$)?\s+(?:em|de|no|na|nos|nas|do|da)\s+([a-zA-ZÀ-ú][a-zA-ZÀ-ú\s]{1,40}?)(?:\s+(?:ontem|hoje|hj|amanhã|também|tambem)|$)/i);
+              const extracted = (mAfter?.[1] || mBefore?.[1] || "").trim();
+              if (extracted && extracted.length > 1) {
+                expDesc = extracted.replace(/\s+(ontem|hoje|hj|amanhã|também|tambem)$/i, "").trim();
+                console.log(`[${remoteJid}] 📝 Desc fallback EXPENSE: "${expDesc}"`);
+              } else {
+                expDesc = "Gasto";
+              }
+            }
             const expCat  = parsedData.category  || "Outros";
             await prisma.expense.create({
               data: { user_id: user.id, amount: val, description: expDesc, category: expCat, date: expDate }
@@ -791,10 +818,30 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
         else if (action === "INCOME") {
           const val = parseFloat(String(parsedData.amount || 0).replace(',', '.').replace(/[^\d.]/g, ''));
           if (val > 0) {
-            const incDate = parsedData.date
-              ? (() => { const s = String(parsedData.date).replace(/Z$/i, ""); return new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s); })()
+            let incDateRaw = parsedData.date;
+            if (!incDateRaw) {
+              const t = new Date();
+              if (/\bontem\b/i.test(msgText)) {
+                const y = new Date(t); y.setDate(t.getDate() - 1);
+                incDateRaw = `${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,'0')}-${String(y.getDate()).padStart(2,'0')}`;
+              } else if (/\banteontem\b/i.test(msgText)) {
+                const y = new Date(t); y.setDate(t.getDate() - 2);
+                incDateRaw = `${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,'0')}-${String(y.getDate()).padStart(2,'0')}`;
+              }
+            }
+            const incDate = incDateRaw
+              ? (() => { const s = String(incDateRaw).replace(/Z$/i, ""); return new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s); })()
               : new Date();
-            const incDesc = parsedData.description || "Receita";
+
+            let incDesc = parsedData.description;
+            if (!incDesc || /^receita$/i.test(incDesc.trim())) {
+              const mAfter  = msgText.match(/\d[,.]?\d*\s*(?:reais|r\$)?\s+(?:em|de|no|na|nos|nas|do|da)\s+([a-zA-ZÀ-ú][a-zA-ZÀ-ú\s]{1,40}?)(?:\s+(?:ontem|hoje|hj|amanhã|também|tambem)|$)/i);
+              const mBefore = msgText.match(/^([a-zA-ZÀ-ú][a-zA-ZÀ-ú\s]{1,30}?)\s+\d/i);
+              const extracted = (mAfter?.[1] || mBefore?.[1] || "").trim();
+              incDesc = (extracted && extracted.length > 1)
+                ? extracted.replace(/\s+(ontem|hoje|hj|amanhã|também|tambem)$/i, "").trim()
+                : "Receita";
+            }
             const incCat  = parsedData.category  || "Renda";
             await prisma.income.create({
               data: { user_id: user.id, amount: val, description: incDesc, category: incCat, date: incDate }
