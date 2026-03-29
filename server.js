@@ -74,25 +74,36 @@ function sanitizeText(str) {
 
 // Infere categoria de gasto/receita a partir do texto — usado como fallback quando AI retorna "Outros"
 function inferCategory(text) {
-  const t = (text || "").toLowerCase();
-  if (/\b(uber|taxi|táxi|99|ônibus|metrô|metro|trem|combustível|gasolina|estacionamento|passagem|transporte)\b/.test(t))
+  const t = (text || "").toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // remove acentos para comparação
+
+  if (/\b(uber|99pop|99|cabify|taxi|taxista|onibus|metro|metrô|trem|vlt|brt|ferry|balsa|moto.?taxi|mototaxi|combustivel|gasolina|etanol|alcool|diesel|gnv|abastec|posto|estacionamento|pedagio|pedagio|passagem|bilhete|cartao.?transporte|condução|conducao|fretado|van|bicicleta|bike|patinete|scooter|transporte|locomocao|deslocamento|viagem\s+de\s+trabalho)\b/.test(t))
     return "Transporte";
-  if (/\b(mercado|supermercado|feira|hortifruti|sacolão|açougue|padaria|compras\s+de\s+casa)\b/.test(t))
+
+  if (/\b(mercado|supermercado|hipermercado|atacado|atacarejo|assai|atacadao|carrefour|extra|pao.?de.?acucar|walmart|lidl|aldi|sacolao|hortifruti|quitanda|feira|feirinha|verdura|legume|fruta|acougue|peixaria|frigorífico|frigorifico|padaria|confeitaria|doceria|mercearia|armazem|emporio|provisoes|mantimentos|compras.?do.?(mes|semana|casa|cozinha))\b/.test(t))
     return "Mercado";
-  if (/\b(restaurante|almoço|almoco|jantar|lanche|pizza|hamburguer|hambúrguer|comida|refeição|refeicao|café|cafeteria|delivery|ifood|rappi)\b/.test(t))
+
+  if (/\b(restaurante|lanchonete|hamburgueria|pizzaria|sushiaria|churrascaria|bar|boteco|petisco|botequim|trailer|food.?truck|cantina|birosca|quiosque|fast.?food|mc(donalds|donald)|burguer.?king|subway|kfc|bobs|habib|giraffas|outback|applebees|almoco|almoço|jantar|cafe.?da.?manha|cafe.?da.?manhã|desjejum|lanche|marmita|comida|refeicao|refeição|prato|pizza|hamburguer|hambúrguer|sushi|yakisoba|churrasco|espetinho|pastel|coxinha|salgado|sanduiche|sanduíche|sorvete|acai|açaí|frozen|smoothie|suco|refrigerante|agua.?mineral|cerveja|chopp|drinque|drink|bebida|ifood|rappi|uber.?eats|loggi|aiqfome|delivery|entrega.?de.?comida)\b/.test(t))
     return "Alimentação";
-  if (/\b(cinema|teatro|show|ingresso|netflix|spotify|disney|prime|hbo|streaming|jogo|game|clube)\b/.test(t))
+
+  if (/\b(cinema|cinemark|cinepolis|uci|multiplex|teatro|musical|show|festival|concerto|opera|ballet|balé|evento|ingresso|ticket|bilhete.?(de.?show|cultural)|netflix|spotify|deezer|youtube.?premium|disney\+?|hbo\+?|max|prime.?video|apple.?tv|paramount|globoplay|telecine|crunchyroll|twitch|steam|playstation|xbox|nintendo|jogo|game|vídeo.?game|video.?game|clube|academia.?de.?danca|dança|teatro|museu|exposicao|exposição|parque.?de.?diversao|diversao|passatempo|hobby|barzinho|balada|festa|aniversario|churrasquinho|rolê|role|passeio|viagem|excursao|excursão|turismo|hotel|airbnb|hostel|resort|cruzeiro|pousada|trilha|camping)\b/.test(t))
     return "Lazer";
-  if (/\b(farmácia|farmacia|remédio|remedio|médico|medico|consulta|exame|plano\s+de\s+saúde|dentista|hospital|cirurgia)\b/.test(t))
+
+  if (/\b(farmacia|farmácia|drogaria|drogasil|drogaraia|ultrafarma|pacheco|remedios|remédios|medicamento|comprimido|capsula|injecao|injeção|vacina|vitamina|suplemento|medico|médico|medica|clínica|clinica|consulta|exame|laboratorio|laboratório|radiografia|ultrassom|tomografia|ressonancia|cirurgia|internacao|internação|hospital|ubs|sus|plano.?de.?saude|convenio.?medico|odonto|dentista|ortodontia|aparelho.?dentario|implante.?dentario|psicologo|psicologa|psiquiatra|terapeuta|terapia|fisioterapeuta|fisioterapia|fonoaudiologo|nutricionista|academica.?de.?saude|academia|personal.?trainer|pilates|yoga|crossfit|musculacao|musculação|ginastica|ginástica|corrida|natacao|natação|esporte|saúde|saude)\b/.test(t))
     return "Saúde";
-  if (/\b(faculdade|escola|curso|livro|material|mensalidade\s+escolar|educação|educacao)\b/.test(t))
+
+  if (/\b(faculdade|universidade|usp|unicamp|puc|mackenzie|unip|anhanguera|estacio|kroton|escola|colegio|colégio|creche|jardim.?de.?infancia|infância|ensino|graduacao|graduação|pos.?graduacao|mba|mestrado|doutorado|curso|aula|workshop|treinamento|capacitacao|capacitação|certificacao|certificação|idioma|ingles|inglês|espanhol|frances|francês|libras|reforco|reforço|apostila|livro|livro.?didatico|material.?escolar|caderno|caneta|mochila|uniforme|mensalidade.?escolar|matricula|matrícula|bolsa.?de.?estudos|educacao|educação|enem|vestibular|concurso|coaching)\b/.test(t))
     return "Educação";
-  if (/\b(aluguel|condomínio|condominio|luz|energia|água|agua|gás|gas|internet|conta\s+de|boleto)\b/.test(t))
+
+  if (/\b(aluguel|condominio|condomínio|iptu|itr|agua|água|luz|energia.?eletrica|eletrica|celpe|cemig|copel|enel|coelba|sabesp|copasa|embasa|gas.?canalizado|gas.?encanado|internet|banda.?larga|wi.?fi|cabo|net|claro.?residencial|vivo.?fibra|tim.?live|oi.?fibra|telefone.?fixo|seguro.?residencial|seguro.?imovel|vistoria|mudanca|mudança|movel|móvel|sofa|sofá|cama|colchao|colchão|guarda.?roupa|armario|armário|geladeira|fogao|fogão|microondas|maquina.?de.?lavar|lavadora|secadora|maquina.?de.?louça|ar.?condicionado|ventilador|reforma|obra|pintura|eletricista|encanador|pedreiro|jardineiro|faxineira|diarista|limpeza|manutencao|manutenção|casa|apartamento|imovel|imóvel|moradia|habitacao|habitação)\b/.test(t))
     return "Moradia";
-  if (/\b(roupa|sapato|sapatos|calçado|calcado|brincos?|colar|pulseira|bolsa|maquiagem|perfume|salão|salao|cabelo|manicure)\b/.test(t))
+
+  if (/\b(roupa|roupas|camisa|camiseta|camisas|blusa|blusas|calça|calca|saia|vestido|shorts|bermuda|jaqueta|casaco|paletó|paleto|terno|gravata|cinto|meia|cueca|calcinha|sutiã|sutia|pijama|moletom|moleton|agasalho|biquini|biquíni|maio|sunga|sapato|sapatos|tenis|tênis|sandalia|sandália|chinelo|bota|salto|scarpin|mocassim|bolsa|carteira|mochila|mala|acessorio|acessório|brinco|brincos|colar|pulseira|anel|relógio|relogio|óculos|oculos|chapeu|chapéu|boné|bone|cinto|gravata|lenco|lenço|toalha|cosmético|cosmetico|maquiagem|batom|base|blush|sombra|rimel|mascara|hidratante|creme|loção|locao|perfume|colonia|colônia|desodorante|xampu|shampoo|condicionador|sabonete|gel|cera|bronzeador|protetor.?solar|depilacao|depilação|manicure|pedicure|unhas|cabelo|corte.?de.?cabelo|tintura|coloracao|coloração|escova|hidratacao.?capilar|salao|salão|barbearia|estetica|estética|spa|massagem|botox|procedimento.?estetico)\b/.test(t))
     return "Cuidados Pessoais";
-  if (/\b(celular|telefone|plano|assinatura|mensalidade|seguro)\b/.test(t))
+
+  if (/\b(celular|smartphone|iphone|samsung|motorola|xiaomi|tablet|ipad|notebook|computador|pc|monitor|impressora|fone|headphone|earphone|carregador|cabo|mouse|teclado|pendrive|hd|ssd|camera|câmera|tv|televisao|televisão|eletronico|eletrônico|gadget|plano.?(celular|mensal|dados)|tim|claro|vivo|oi|nextel|internet.?movel|internet.?móvel|chip|recarga|mensalidade|assinatura|seguro|seguros|seguro.?(auto|carro|vida|residencial|saude)|previdencia|previdência|consorcio|consórcio|financiamento|emprestimo|empréstimo|prestacao|prestação|parcela|divida|dívida|fatura|boleto|conta.?(telefone|celular|luz|agua|gas)|tributo|taxa|multa|imposto|ir|irpf|inss|fgts|servico|serviço|manutencao|manutenção|assistencia|assistência.?tecnica|tecnica)\b/.test(t))
     return "Serviços";
+
   return null; // não inferiu — mantém o que veio da AI
 }
 
