@@ -442,7 +442,8 @@ independente do vocabulário que usar.
    INTENÇÃO: usuário quer remover, apagar ou eliminar algum dado já registrado.
    REGRA: "target" = nome específico do item. Para apagar todos de um tipo, use target: null.
    type "ALL" somente para reset total — nunca para um tipo específico.
-   Exemplos: "apaga o gasto do uber" → target: "uber" | "limpe meus gastos" → type: EXPENSES, target: null
+   Exemplos: "apaga o gasto do uber" → type: EXPENSES, target: "uber" | "limpe meus gastos" → type: EXPENSES, target: null
+   "delete minhas receitas" → type: INCOMES, target: null | "limpe as receitas" → type: INCOMES, target: null
    "tira aquela tarefa de academia" → type: TASKS, target: "academia" | "zera tudo" → type: ALL
    → { "action": "DELETE", "parsedData": { "type": "EXPENSES", "target": "uber" } }
 
@@ -522,7 +523,11 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
     PROIBIDO: escrever "tarefa registrada" ou "lembrete criado" sem action TASK em "actions".
     PROIBIDO: escrever "atualizado", "alterado", "corrigido", "renomeado" ou qualquer confirmação de edição sem action UPDATE em "actions".
     PROIBIDO: escrever "apagado", "deletado", "removido" ou qualquer confirmação de exclusão sem action DELETE em "actions".
-    Se o dado já existia no contexto, registre-o igualmente — o sistema lida com duplicatas automaticamente.`;
+
+R0c. PERGUNTAS DE VERIFICAÇÃO nunca geram EXPENSE/INCOME:
+    "você cadastrou isso?", "registrou?", "aparece aí?", "está salvo?", "cadastrou esse último gasto?"
+    São perguntas — responda com texto confirmando ou negando. NUNCA gere EXPENSE ou INCOME para essas.
+    EXPENSE/INCOME só são criados quando o usuário DECLARA um novo gasto ou receita com valor explícito.`;
 
     // ─── Chamada IA ────────────────────────────────────────────────────────────
 
@@ -656,12 +661,12 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
     // Safeguard: IA confirmou deleção ("removidos", "apagados") sem gerar DELETE action
     {
       const deleteConfirmPatterns = [
-        /removidos?/i,
-        /apagados?/i,
-        /deletados?/i,
-        /limpos?/i,
+        /removid[oa]s?/i,
+        /apagad[oa]s?/i,
+        /deletad[oa]s?/i,
+        /limpos?|limpas?/i,
         /zerados?/i,
-        /exclu[íi]dos?/i,
+        /exclu[íi]d[oa]s?/i,
       ];
       const hasDeleteAct = aiResponse.actions.some(a => a?.action === "DELETE");
       const looksLikeDeleteConfirm = deleteConfirmPatterns.some(p => p.test(aiResponse.reply || ""));
@@ -881,7 +886,7 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
 
             // Fallback de descrição: quando AI retorna genérico ("Gasto") extrai da mensagem
             let expDesc = parsedData.description;
-            if (!expDesc || /^gasto$/i.test(expDesc.trim())) {
+            if (!expDesc || /^(gasto|registr[ae]|cadastr[ae]|adicion[ae]|coloc[ao]|marqu[e]|anot[ae])\b/i.test(expDesc.trim())) {
               // Prioridade 1: "{valor} em/de/no/na {desc}" — ex: "19,90 em brincos novos"
               const mAfter = msgText.match(/\d[,.]?\d*\s*(?:reais|r\$)?\s+(?:em|de|no|na|nos|nas|do|da)\s+([a-zA-ZÀ-ú][a-zA-ZÀ-ú\s]{1,40}?)(?:\s+(?:ontem|hoje|hj|amanhã|também|tambem)|$)/i);
               // Prioridade 2: "{desc} {verbo?} {valor}" — para antes de verbos de preço e antes do número
@@ -921,14 +926,15 @@ R8. AÇÃO OBRIGATÓRIA ANTES DA CONFIRMAÇÃO: Toda confirmação no "reply" EX
               : new Date();
 
             let incDesc = parsedData.description;
-            if (!incDesc || /^receita$/i.test(incDesc.trim())) {
+            if (!incDesc || /^(receita|registr[ae]|cadastr[ae]|adicion[ae]|coloc[ao]|marqu[e]|anot[ae])\b/i.test(incDesc.trim())) {
               const mAfter  = msgText.match(/\d[,.]?\d*\s*(?:reais|r\$)?\s+(?:em|de|no|na|nos|nas|do|da)\s+([a-zA-ZÀ-ú][a-zA-ZÀ-ú\s]{1,40}?)(?:\s+(?:ontem|hoje|hj|amanhã|também|tambem)|$)/i);
               const mBefore = msgText.match(/^([a-zA-ZÀ-ú][a-zA-ZÀ-ú\s]{1,35}?)\s+(?:foi|é|e|eh|era|custa[va]?|saiu|valeu?|ficou|fica|recebi|entrou)?\s*\d/i);
               const extracted = cleanExtractedDesc(mAfter?.[1] || mBefore?.[1] || "");
               incDesc = (extracted && extracted.length > 1) ? extracted : "Receita";
             }
             const aiIncCat = parsedData.category || "";
-            const incCat = (!aiIncCat || /^(renda|outros)$/i.test(aiIncCat))
+            const expenseOnlyCategories = /^(mercado|transporte|alimentação|alimentacao|lazer|saúde|saude|educação|educacao|moradia|cuidados pessoais|serviços|servicos|compras|outros)$/i;
+            const incCat = (!aiIncCat || /^(renda|outros)$/i.test(aiIncCat) || expenseOnlyCategories.test(aiIncCat))
               ? (inferCategory(incDesc) || inferCategory(msgText) || "Renda")
               : aiIncCat;
             await prisma.income.create({
