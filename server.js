@@ -1145,6 +1145,28 @@ R0c. PERGUNTAS DE VERIFICAÇÃO nunca geram EXPENSE/INCOME:
               const lastSun = new Date(lastMon); lastSun.setDate(lastMon.getDate() + 6); lastSun.setHours(23, 59, 59, 999);
               dateFilter = { gte: lastMon, lte: lastSun };
               periodLabel = "na semana passada";
+            } else {
+              // Ranges relativos: "em N dias", "nos últimos N dias", "em N semanas", "em N meses"
+              const daysMatch  = txt.match(/\b(?:em|nos?|nesses?|[uú]ltimos?)\s+(\d+)\s+dias?\b/);
+              const weeksMatch = txt.match(/\b(?:em|nas?|nessas?|[uú]ltimas?)\s+(\d+)\s+semanas?\b/);
+              const monthsMatch = txt.match(/\b(?:em|nos?|nesses?|[uú]ltimos?)\s+(\d+)\s+m[eê]ses?\b/);
+              const t = new Date();
+              if (daysMatch) {
+                const n = parseInt(daysMatch[1], 10);
+                const from = new Date(t); from.setDate(t.getDate() - (n - 1)); from.setHours(0, 0, 0, 0);
+                dateFilter = { gte: from, lte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59) };
+                periodLabel = `nos últimos ${n} dias`;
+              } else if (weeksMatch) {
+                const n = parseInt(weeksMatch[1], 10);
+                const from = new Date(t); from.setDate(t.getDate() - (n * 7 - 1)); from.setHours(0, 0, 0, 0);
+                dateFilter = { gte: from, lte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59) };
+                periodLabel = `nas últimas ${n} semanas`;
+              } else if (monthsMatch) {
+                const n = parseInt(monthsMatch[1], 10);
+                const from = new Date(t); from.setMonth(t.getMonth() - n + 1); from.setDate(1); from.setHours(0, 0, 0, 0);
+                dateFilter = { gte: from, lte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59) };
+                periodLabel = `nos últimos ${n} meses`;
+              }
             }
           }
 
