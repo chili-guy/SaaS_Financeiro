@@ -1085,6 +1085,18 @@ R0c. PERGUNTAS DE VERIFICAÇÃO nunca geram EXPENSE/INCOME:
                 gte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 0, 0, 0),
                 lte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59)
               };
+            } else if (rawDate === "ONTEM" || rawDate === "YESTERDAY") {
+              const t = new Date(); t.setDate(t.getDate() - 1);
+              dateFilter = {
+                gte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 0, 0, 0),
+                lte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59)
+              };
+            } else if (rawDate === "ANTEONTEM") {
+              const t = new Date(); t.setDate(t.getDate() - 2);
+              dateFilter = {
+                gte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 0, 0, 0),
+                lte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59)
+              };
             } else {
               const monthMatch = rawDate.match(/^(\d{4})-(\d{2})$/);
               if (monthMatch) {
