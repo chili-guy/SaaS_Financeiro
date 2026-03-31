@@ -880,9 +880,16 @@ R0c. PERGUNTAS DE VERIFICAÇÃO nunca geram EXPENSE/INCOME:
           if (val > 0) {
             // Fallback de data: se AI não enviou mas mensagem tem indicador temporal (ontem, quinta-feira, etc.)
             const expDateRaw = parsedData.date || extractDateFromMsg(msgText);
-            const expDate = expDateRaw
-              ? (() => { const s = String(expDateRaw).replace(/Z$/i, ""); return new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s); })()
-              : new Date();
+            const expDate = (() => {
+              if (!expDateRaw) return new Date();
+              const s = String(expDateRaw).trim().toUpperCase().replace(/Z$/i, "");
+              if (s === "HOJE" || s === "TODAY") return new Date();
+              if (s === "ONTEM" || s === "YESTERDAY") { const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(12, 0, 0, 0); return d; }
+              if (s === "ANTEONTEM") { const d = new Date(); d.setDate(d.getDate() - 2); d.setHours(12, 0, 0, 0); return d; }
+              const iso = /^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s;
+              const parsed = new Date(iso);
+              return isNaN(parsed.getTime()) ? new Date() : parsed;
+            })();
 
             // Fallback de descrição: quando AI retorna genérico ("Gasto") extrai da mensagem
             let expDesc = parsedData.description;
@@ -921,9 +928,16 @@ R0c. PERGUNTAS DE VERIFICAÇÃO nunca geram EXPENSE/INCOME:
           const val = parseFloat(String(parsedData.amount || 0).replace(',', '.').replace(/[^\d.]/g, ''));
           if (val > 0) {
             const incDateRaw = parsedData.date || extractDateFromMsg(msgText);
-            const incDate = incDateRaw
-              ? (() => { const s = String(incDateRaw).replace(/Z$/i, ""); return new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s); })()
-              : new Date();
+            const incDate = (() => {
+              if (!incDateRaw) return new Date();
+              const s = String(incDateRaw).trim().toUpperCase().replace(/Z$/i, "");
+              if (s === "HOJE" || s === "TODAY") return new Date();
+              if (s === "ONTEM" || s === "YESTERDAY") { const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(12, 0, 0, 0); return d; }
+              if (s === "ANTEONTEM") { const d = new Date(); d.setDate(d.getDate() - 2); d.setHours(12, 0, 0, 0); return d; }
+              const iso = /^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s;
+              const parsed = new Date(iso);
+              return isNaN(parsed.getTime()) ? new Date() : parsed;
+            })();
 
             let incDesc = parsedData.description;
             if (!incDesc || /^(receita|registr[ae]|cadastr[ae]|adicion[ae]|coloc[ao]|marqu[e]|anot[ae])\b/i.test(incDesc.trim())) {
