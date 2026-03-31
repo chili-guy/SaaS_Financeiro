@@ -1175,11 +1175,13 @@ R0c. PERGUNTAS DE VERIFICAÇÃO nunca geram EXPENSE/INCOME:
             }
 
           } else if (queryType === "EXPENSES") {
+            console.log(`[${remoteJid}] 🔍 QUERY EXPENSES dateFilter:`, JSON.stringify(dateFilter));
             const exps = await prisma.expense.findMany({
               where: { user_id: user.id, date: dateFilter },
               orderBy: { date: 'desc' },
               take: 50
             });
+            console.log(`[${remoteJid}] 🔍 QUERY EXPENSES encontrou ${exps.length} registros:`, exps.map(e => `${e.description} R$${e.amount} ${e.date.toISOString()}`));
             // Salva lista no cache na mesma ordem exibida em formatFinanceRecords (por categoria total desc)
             {
               const grps = {};
@@ -1525,8 +1527,14 @@ R0c. PERGUNTAS DE VERIFICAÇÃO nunca geram EXPENSE/INCOME:
     }
 
     // Aplica confirmações acumuladas de transações financeiras (formato padronizado)
+    // Se também houve uma QUERY no mesmo lote, preserva o resultado da lista e prepende as confirmações
     if (financeReplies.length > 0) {
-      aiResponse.reply = financeReplies.join("\n\n");
+      const hasQueryInBatch = uniqueActs.some(a => a.action === "QUERY");
+      if (hasQueryInBatch && aiResponse.reply) {
+        aiResponse.reply = financeReplies.join("\n\n") + "\n\n" + aiResponse.reply;
+      } else {
+        aiResponse.reply = financeReplies.join("\n\n");
+      }
     }
 
     // ─── Resposta final ────────────────────────────────────────────────────────
