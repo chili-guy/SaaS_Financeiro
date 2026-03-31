@@ -72,47 +72,100 @@ function sanitizeText(str) {
   return str.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "");
 }
 
-// Extrai data a partir de expressões temporais na mensagem — retorna string "YYYY-MM-DD" ou null
-function extractDateFromMsg(msgText) {
+// Resolve qualquer valor de data relativa (string da IA ou texto de mensagem) para ISO "YYYY-MM-DD" ou "YYYY-MM".
+// Aceita: "HOJE/HJ/TODAY", "ONTEM/YESTERDAY", "ANTEONTEM", nomes de dias da semana,
+//         "YYYY-MM-DD", "YYYY-MM" — ou null se não reconhecer.
+function resolveDate(raw) {
+  if (!raw) return null;
+  // Normaliza: minúsculas, sem acentos
+  const s = String(raw).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const t = new Date();
-  const txt = (msgText || "").toLowerCase();
+  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 
-  if (/\b(hoje|hj)\b/.test(txt)) {
-    return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
-  }
-  if (/\bontem\b/.test(txt)) {
-    const y = new Date(t); y.setDate(t.getDate() - 1);
-    return `${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,'0')}-${String(y.getDate()).padStart(2,'0')}`;
-  }
-  if (/\banteontem\b/.test(txt)) {
-    const y = new Date(t); y.setDate(t.getDate() - 2);
-    return `${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,'0')}-${String(y.getDate()).padStart(2,'0')}`;
-  }
+  if (/^(hoje|hj|today)$/.test(s)) return fmt(t);
+  if (/^(ontem|yesterday)$/.test(s)) { const d = new Date(t); d.setDate(t.getDate()-1); return fmt(d); }
+  if (/^(anteontem|day ?before ?yesterday)$/.test(s)) { const d = new Date(t); d.setDate(t.getDate()-2); return fmt(d); }
 
-  // Dias da semana — retrocede ao dia mais recente que corresponde
-  const dowNames = { "domingo":0,"segunda":1,"terca":1,"terça":1,"quarta":3,"quinta":4,"sexta":5,"sabado":6,"sábado":6 };
-  // Alias completos
-  const aliases = { "segunda-feira":1,"terça-feira":2,"terca-feira":2,"quarta-feira":3,"quinta-feira":4,"sexta-feira":5,"sábado":6,"sabado":6,"domingo":0 };
-  for (const [name, dow] of Object.entries(aliases)) {
+  // Formato mês YYYY-MM (retorna como está para filtro de mês)
+  if (/^\d{4}-\d{2}$/.test(String(raw).trim())) return String(raw).trim();
+  // Formato dia YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(raw).trim())) return String(raw).trim();
+
+  // Dias da semana (resolve para a ocorrência mais recente passada)
+  const dowMap = {
+    "domingo":0, "dom":0,
+    "segunda":1, "segunda-feira":1, "seg":1,
+    "terca":2, "terca-feira":2, "ter":2,
+    "quarta":3, "quarta-feira":3, "qua":3,
+    "quinta":4, "quinta-feira":4, "qui":4,
+    "sexta":5, "sexta-feira":5, "sex":5,
+    "sabado":6, "sab":6,
+  };
+  if (Object.prototype.hasOwnProperty.call(dowMap, s)) {
+    const cur = t.getDay();
+    let diff = cur - dowMap[s];
+    if (diff <= 0) diff += 7;
+    const d = new Date(t); d.setDate(t.getDate() - diff);
+    return fmt(d);
+  }
+  return null;
+}
+
+// Extrai data a partir de expressões temporais na mensagem — retorna "YYYY-MM-DD" ou null
+function extractDateFromMsg(msgText) {
+  const txt = (msgText || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const t = new Date();
+  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+  if (/\b(hoje|hj)\b/.test(txt)) return fmt(t);
+  if (/\bontem\b/.test(txt)) { const d = new Date(t); d.setDate(t.getDate()-1); return fmt(d); }
+  if (/\banteontem\b/.test(txt)) { const d = new Date(t); d.setDate(t.getDate()-2); return fmt(d); }
+
+  // Dias da semana — prioriza forma longa para evitar ambiguidade
+  const aliases = [
+    ["segunda-feira",1],["terca-feira",2],["quarta-feira",3],
+    ["quinta-feira",4],["sexta-feira",5],["sabado",6],["domingo",0],
+    ["segunda",1],["terca",2],["quarta",3],["quinta",4],["sexta",5],
+  ];
+  for (const [name, dow] of aliases) {
     if (txt.includes(name)) {
-      const cur = t.getDay();
-      let diff = cur - dow;
-      if (diff <= 0) diff += 7; // vai para a semana anterior se for hoje ou futuro
-      const d = new Date(t); d.setDate(t.getDate() - diff);
-      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    }
-  }
-  // Alias curtos (sem o "-feira") — só se o alias completo não bateu
-  for (const [name, dow] of Object.entries(dowNames)) {
-    if (new RegExp(`\\b${name}\\b`).test(txt)) {
       const cur = t.getDay();
       let diff = cur - dow;
       if (diff <= 0) diff += 7;
       const d = new Date(t); d.setDate(t.getDate() - diff);
-      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      return fmt(d);
     }
   }
   return null;
+}
+
+// Converte resultado de resolveDate em objeto Date (meio-dia local) para persistência
+function toDateObj(isoOrRelative) {
+  const iso = resolveDate(isoOrRelative) || isoOrRelative;
+  if (!iso) return new Date();
+  if (/^\d{4}-\d{2}$/.test(iso)) {
+    // mês: usa primeiro dia
+    const [yr, mo] = iso.split('-').map(Number);
+    return new Date(yr, mo-1, 1, 12, 0, 0);
+  }
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + "T12:00:00" : iso);
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
+// Converte resultado de resolveDate em filtro Prisma { gte, lte }
+function toDateFilter(isoOrRelative, fallback) {
+  const iso = resolveDate(isoOrRelative);
+  if (!iso) return fallback;
+  if (/^\d{4}-\d{2}$/.test(iso)) {
+    const [yr, mo] = iso.split('-').map(Number);
+    return { gte: new Date(yr, mo-1, 1, 0, 0, 0), lte: new Date(yr, mo, 0, 23, 59, 59) };
+  }
+  const d = new Date(iso + "T12:00:00");
+  if (isNaN(d.getTime())) return fallback;
+  return {
+    gte: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0),
+    lte: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59)
+  };
 }
 
 // Limpa descrição extraída: remove artigos iniciais e cláusulas relativas finais
@@ -879,17 +932,7 @@ R0c. PERGUNTAS DE VERIFICAÇÃO nunca geram EXPENSE/INCOME:
           const val = parseFloat(String(parsedData.amount || 0).replace(',', '.').replace(/[^\d.]/g, ''));
           if (val > 0) {
             // Fallback de data: se AI não enviou mas mensagem tem indicador temporal (ontem, quinta-feira, etc.)
-            const expDateRaw = parsedData.date || extractDateFromMsg(msgText);
-            const expDate = (() => {
-              if (!expDateRaw) return new Date();
-              const s = String(expDateRaw).trim().toUpperCase().replace(/Z$/i, "");
-              if (s === "HOJE" || s === "TODAY") return new Date();
-              if (s === "ONTEM" || s === "YESTERDAY") { const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(12, 0, 0, 0); return d; }
-              if (s === "ANTEONTEM") { const d = new Date(); d.setDate(d.getDate() - 2); d.setHours(12, 0, 0, 0); return d; }
-              const iso = /^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s;
-              const parsed = new Date(iso);
-              return isNaN(parsed.getTime()) ? new Date() : parsed;
-            })();
+            const expDate = toDateObj(parsedData.date || extractDateFromMsg(msgText));
 
             // Fallback de descrição: quando AI retorna genérico ("Gasto") extrai da mensagem
             let expDesc = parsedData.description;
@@ -927,17 +970,7 @@ R0c. PERGUNTAS DE VERIFICAÇÃO nunca geram EXPENSE/INCOME:
         else if (action === "INCOME") {
           const val = parseFloat(String(parsedData.amount || 0).replace(',', '.').replace(/[^\d.]/g, ''));
           if (val > 0) {
-            const incDateRaw = parsedData.date || extractDateFromMsg(msgText);
-            const incDate = (() => {
-              if (!incDateRaw) return new Date();
-              const s = String(incDateRaw).trim().toUpperCase().replace(/Z$/i, "");
-              if (s === "HOJE" || s === "TODAY") return new Date();
-              if (s === "ONTEM" || s === "YESTERDAY") { const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(12, 0, 0, 0); return d; }
-              if (s === "ANTEONTEM") { const d = new Date(); d.setDate(d.getDate() - 2); d.setHours(12, 0, 0, 0); return d; }
-              const iso = /^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s;
-              const parsed = new Date(iso);
-              return isNaN(parsed.getTime()) ? new Date() : parsed;
-            })();
+            const incDate = toDateObj(parsedData.date || extractDateFromMsg(msgText));
 
             let incDesc = parsedData.description;
             if (!incDesc || /^(receita|registr[ae]|cadastr[ae]|adicion[ae]|coloc[ao]|marqu[e]|anot[ae])\b/i.test(incDesc.trim())) {
@@ -1075,78 +1108,36 @@ R0c. PERGUNTAS DE VERIFICAÇÃO nunca geram EXPENSE/INCOME:
           // — garante que replyToSave salve o tipo correto ("Mostrei os dados: EXPENSES", não "SUMMARY")
           parsedData.type = queryType;
 
-          // Resolução de período
+          // Resolução de período — prioriza parsedData.date da IA, depois fallback semântico na mensagem
           let dateFilter = { gte: firstDayMonth };
+          let periodLabel = "";
+
           if (parsedData.date) {
-            const rawDate = String(parsedData.date).trim().toUpperCase();
-            if (rawDate === "HOJE" || rawDate === "TODAY") {
-              const t = new Date();
-              dateFilter = {
-                gte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 0, 0, 0),
-                lte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59)
-              };
-            } else if (rawDate === "ONTEM" || rawDate === "YESTERDAY") {
-              const t = new Date(); t.setDate(t.getDate() - 1);
-              dateFilter = {
-                gte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 0, 0, 0),
-                lte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59)
-              };
-            } else if (rawDate === "ANTEONTEM") {
-              const t = new Date(); t.setDate(t.getDate() - 2);
-              dateFilter = {
-                gte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 0, 0, 0),
-                lte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59)
-              };
-            } else {
-              const monthMatch = rawDate.match(/^(\d{4})-(\d{2})$/);
-              if (monthMatch) {
-                const yr = parseInt(monthMatch[1]);
-                const mo = parseInt(monthMatch[2]) - 1;
-                dateFilter = { gte: new Date(yr, mo, 1), lte: new Date(yr, mo + 1, 0, 23, 59, 59) };
-              } else {
-                const d = new Date(rawDate);
-                if (!isNaN(d.getTime())) {
-                  dateFilter = {
-                    gte: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0),
-                    lte: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59)
-                  };
-                }
-              }
-            }
+            // IA enviou um valor de data — usa resolveDate/toDateFilter para tratar qualquer formato
+            const resolved = toDateFilter(parsedData.date, null);
+            if (resolved) dateFilter = resolved;
           }
 
-          // Fallback semântico de período — se IA não enviou date mas mensagem tem indicador temporal
-          let periodLabel = "";
+          // Fallback semântico — quando IA não enviou date, lê diretamente a mensagem
           if (!parsedData.date && queryType !== "SUMMARY") {
-            const t = new Date();
-            if (/\b(hoje|hj)\b/i.test(msgText)) {
-              dateFilter = {
-                gte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 0, 0, 0),
-                lte: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59)
-              };
-              periodLabel = "hoje";
-            } else if (/\bontem\b/i.test(msgText)) {
-              const y = new Date(t); y.setDate(t.getDate() - 1);
-              dateFilter = {
-                gte: new Date(y.getFullYear(), y.getMonth(), y.getDate(), 0, 0, 0),
-                lte: new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59)
-              };
-              periodLabel = "ontem";
-            } else if (/\banteontem\b/i.test(msgText)) {
-              const y = new Date(t); y.setDate(t.getDate() - 2);
-              dateFilter = {
-                gte: new Date(y.getFullYear(), y.getMonth(), y.getDate(), 0, 0, 0),
-                lte: new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59)
-              };
-              periodLabel = "anteontem";
+            const txt = (msgText || "").toLowerCase();
+            const msgDateISO = extractDateFromMsg(msgText);
+            if (msgDateISO) {
+              dateFilter = toDateFilter(msgDateISO, dateFilter);
+              if (/\b(hoje|hj)\b/.test(txt)) periodLabel = "hoje";
+              else if (/\bontem\b/.test(txt)) periodLabel = "ontem";
+              else if (/\banteontem\b/.test(txt)) periodLabel = "anteontem";
+              else periodLabel = `dia ${msgDateISO.slice(8, 10)}/${msgDateISO.slice(5, 7)}`;
             } else if (/\b(essa|esta|nessa|nesta|dessa|desta)\s+semana\b/i.test(msgText)) {
+              const t = new Date();
               const dow = t.getDay();
               const daysFromMon = dow === 0 ? 6 : dow - 1;
               const mon = new Date(t); mon.setDate(t.getDate() - daysFromMon); mon.setHours(0, 0, 0, 0);
               const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23, 59, 59, 999);
               dateFilter = { gte: mon, lte: sun };
               periodLabel = "esta semana";
-            } else if (/\b(semana\s+passada|última\s+semana)\b/i.test(msgText)) {
+            } else if (/\b(semana\s+passada|[uú]ltima\s+semana)\b/i.test(msgText)) {
+              const t = new Date();
               const dow = t.getDay();
               const daysFromMon = dow === 0 ? 6 : dow - 1;
               const thisMon = new Date(t); thisMon.setDate(t.getDate() - daysFromMon);
@@ -1335,19 +1326,7 @@ R0c. PERGUNTAS DE VERIFICAÇÃO nunca geram EXPENSE/INCOME:
           if (field === "category") {
             updateData.category = String(rawValue).trim();
           } else if (field === "date") {
-            const rv = String(rawValue).trim().toUpperCase();
-            const t  = new Date();
-            let nd;
-            if (rv === "HOJE" || rv === "TODAY") {
-              nd = new Date(t.getFullYear(), t.getMonth(), t.getDate(), 12, 0, 0);
-            } else if (rv === "ONTEM") {
-              nd = new Date(t); nd.setDate(t.getDate() - 1); nd.setHours(12, 0, 0, 0);
-            } else if (rv === "ANTEONTEM") {
-              nd = new Date(t); nd.setDate(t.getDate() - 2); nd.setHours(12, 0, 0, 0);
-            } else {
-              const s = rv.replace(/Z$/i, "");
-              nd = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s);
-            }
+            const nd = toDateObj(String(rawValue));
             if (nd && !isNaN(nd.getTime())) updateData.date = nd;
           } else if (field === "amount") {
             const v = parseFloat(String(rawValue).replace(',', '.'));
